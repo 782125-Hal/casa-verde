@@ -29,6 +29,7 @@ playwright>=1.40
 openpyxl>=3.1
 # reportlab>=4.0
 
-# Producción (Fase posterior)
-# psycopg2-binary>=2.9
-# gunicorn>=21.0
+# Producción
+whitenoise>=6.6              # Sirve archivos estáticos sin servidor extra
+# gunicorn>=21.0             # Solo si el host lo requiere (no en cPanel/Passenger)
+# psycopg2-binary>=2.9       # Solo si se migra a PostgreSQL
