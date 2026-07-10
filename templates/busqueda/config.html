@@ -1,0 +1,162 @@
+{% extends 'base/base.html' %}
+{% block title %}Búsqueda semanal — {{ CASA_VERDE.NOMBRE }}{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Importar CSV
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Columnas: titulo, precio, zona, tipo, url, m2_terreno, m2_construccion</p>
+                <form method="post" enctype="multipart/form-data">{% csrf_token %}
+                    <input type="hidden" name="importar_csv" value="1">
+                    <div class="mb-3">{{ csv_form.archivo }}</div>
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="bi bi-upload"></i> Subir CSV
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold">
+                <i class="bi bi-link-45deg"></i> Importar desde URL
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Mercado Libre, Lamudi, Propiedades.com, Vivanuncios, Inmuebles24</p>
+                <form method="post">{% csrf_token %}
+                    <input type="hidden" name="importar_url" value="1">
+                    <div class="mb-3">
+                        <label class="form-label">URL del anuncio</label>
+                        {{ import_form.url }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Zona</label>
+                        {{ import_form.zona }}
+                    </div>
+                    <button type="submit" class="btn btn-outline-success w-100">
+                        <i class="bi bi-download"></i> Importar y analizar
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-semibold">
+                <i class="bi bi-search"></i> Nueva configuración
+            </div>
+            <div class="card-body">
+                <form method="post">{% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Zona</label>
+                        {{ form.zona }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de inmueble</label>
+                        {{ form.tipo_inmueble }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Radio (metros)</label>
+                        {{ form.radio_metros }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descuento mínimo (%)</label>
+                        {{ form.descuento_minimo }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Frecuencia</label>
+                        {{ form.frecuencia }}
+                    </div>
+                    <div class="form-check mb-3">
+                        {{ form.activa }}
+                        <label class="form-check-label">Activa</label>
+                    </div>
+                    <button type="submit" class="btn btn-verde w-100">Guardar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold d-flex justify-content-between">
+                <span><i class="bi bi-calendar-week"></i> Búsquedas activas</span>
+                <code class="small">python manage.py busqueda_semanal</code>
+                <span class="badge bg-info text-dark ms-1">Playwright</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Zona</th>
+                            <th>Tipo</th>
+                            <th>Frecuencia</th>
+                            <th>Última ejecución</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in configs %}
+                        <tr>
+                            <td>{{ c.zona.nombre }}</td>
+                            <td>{{ c.get_tipo_inmueble_display|default:"Todos" }}</td>
+                            <td>{{ c.get_frecuencia_display }}</td>
+                            <td>{{ c.ultima_ejecucion|date:"d/m/Y H:i"|default:"Nunca" }}</td>
+                            <td>
+                                <a href="{% url 'busqueda_ejecutar' c.pk %}" class="btn btn-sm btn-outline-success">
+                                    <i class="bi bi-play-fill"></i> Ejecutar
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center text-muted py-4">Sin configuraciones</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-semibold">
+                <i class="bi bi-activity"></i> Log de scraping (Fase 4)
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Fuente</th>
+                            <th>Zona</th>
+                            <th>Estado</th>
+                            <th>Encontrados</th>
+                            <th>Nuevos</th>
+                            <th>Errores</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in scrapes %}
+                        <tr>
+                            <td>{{ s.fuente.nombre }}</td>
+                            <td>{{ s.zona.nombre }}</td>
+                            <td>
+                                <span class="badge {% if s.estado == 'completado' %}bg-success{% elif s.estado == 'error' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ s.get_estado_display }}
+                                </span>
+                            </td>
+                            <td>{{ s.encontrados }}</td>
+                            <td>{{ s.nuevos }}</td>
+                            <td>{{ s.errores }}</td>
+                            <td>{{ s.iniciado_en|date:"d/m H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="7" class="text-center text-muted py-4">Sin ejecuciones de scraping aún</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

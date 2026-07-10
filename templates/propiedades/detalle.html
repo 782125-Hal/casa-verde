@@ -1,0 +1,141 @@
+{% extends 'base/base.html' %}
+{% block title %}{{ propiedad.titulo }} — {{ CASA_VERDE.NOMBRE }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{% url 'propiedades_lista' %}" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <span class="semaforo-dot semaforo-{{ propiedad.semaforo }} fs-4"></span>
+                    <h1 class="h4 mb-0">{{ propiedad.titulo }}</h1>
+                    <span class="badge bg-secondary">{{ propiedad.get_estatus_display }}</span>
+                </div>
+
+                <p class="text-muted"><i class="bi bi-geo-alt"></i> {{ propiedad.zona.ubicacion_completa }}</p>
+                {% if propiedad.descripcion %}
+                <p>{{ propiedad.descripcion }}</p>
+                {% endif %}
+
+                <div class="row g-3 mt-2">
+                    <div class="col-sm-4">
+                        <div class="dato-box">
+                            <div class="dato-label">Precio publicado</div>
+                            <div class="dato-valor text-verde">${{ propiedad.precio_publicado|floatformat:0 }}</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="dato-box">
+                            <div class="dato-label">m² terreno</div>
+                            <div class="dato-valor">{{ propiedad.m2_terreno|default:"—" }}</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="dato-box">
+                            <div class="dato-label">m² construcción</div>
+                            <div class="dato-valor">{{ propiedad.m2_construccion|default:"—" }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr>
+                <div class="row small text-muted">
+                    <div class="col-md-3">Habitaciones: {{ propiedad.habitaciones|default:"—" }}</div>
+                    <div class="col-md-3">Baños: {{ propiedad.banos|default:"—" }}</div>
+                    <div class="col-md-3">Estado: {{ propiedad.get_estado_fisico_display }}</div>
+                    <div class="col-md-3">Tipo: {{ propiedad.get_tipo_inmueble_display }}</div>
+                </div>
+
+                {% if propiedad.url_anuncio %}
+                <a href="{{ propiedad.url_anuncio }}" target="_blank" class="btn btn-sm btn-outline-primary mt-3">
+                    <i class="bi bi-box-arrow-up-right"></i> Ver anuncio original
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if historial %}
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white fw-semibold">Historial de precios</div>
+            <ul class="list-group list-group-flush">
+                {% for h in historial %}
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>{{ h.fecha_cambio|date:"d/m/Y H:i" }}</span>
+                    <span>${{ h.precio_anterior|floatformat:0 }} → ${{ h.precio_nuevo|floatformat:0 }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-4">
+        {% if analisis %}
+        <div class="card shadow-sm border-{{ analisis.semaforo }}">
+            <div class="card-header bg-white fw-semibold">
+                <i class="bi bi-calculator"></i> Análisis de inversión
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr><td>Valor estimado mercado</td><td class="text-end fw-bold">${{ analisis.valor_total_estimado|floatformat:0 }}</td></tr>
+                    <tr><td>Presupuesto remodelación</td><td class="text-end text-warning">${{ analisis.presupuesto_remodelacion|floatformat:0 }}</td></tr>
+                    <tr><td>Inversión total</td><td class="text-end">${{ analisis.inversion_total|floatformat:0 }}</td></tr>
+                    <tr><td>Utilidad potencial</td><td class="text-end text-success">${{ analisis.utilidad_potencial|floatformat:0 }}</td></tr>
+                    <tr><td>Descuento vs mercado</td><td class="text-end"><span class="badge bg-success">{{ analisis.descuento_mercado|floatformat:1 }}%</span></td></tr>
+                    <tr><td>ROI</td><td class="text-end">{{ analisis.roi|floatformat:1 }}%</td></tr>
+                    <tr><td>ROI anualizado</td><td class="text-end fw-bold">{{ analisis.roi_anualizado|floatformat:1 }}%</td></tr>
+                    <tr><td>Años recuperación</td><td class="text-end">{{ analisis.anos_recuperacion|floatformat:1 }}</td></tr>
+                    <tr><td>Tasa bancaria ref.</td><td class="text-end">{{ analisis.tasa_bancaria_referencia|floatformat:1 }}%</td></tr>
+                </table>
+
+                {% if analisis.presupuesto_remodelacion > 0 %}
+                <div class="alert alert-warning small mb-2 py-2">
+                    <i class="bi bi-tools"></i>
+                    <strong>Remodelación {{ analisis.get_nivel_remodelacion_aplicado_display }}</strong><br>
+                    {{ propiedad.m2_construccion|floatformat:0 }} m² × ${{ analisis.costo_remodelacion_m2|floatformat:0 }}/m²
+                    = <strong>${{ analisis.presupuesto_remodelacion|floatformat:0 }}</strong>
+                    {% if analisis.remodelacion_estimada %}
+                    <br><span class="text-muted">Costo genérico — esta zona aún no tiene costo capturado.</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if analisis.es_prioritaria %}
+                <div class="alert alert-success small mb-2">
+                    <i class="bi bi-star-fill"></i> <strong>Oportunidad prioritaria</strong>
+                </div>
+                {% endif %}
+
+                <div class="alert alert-light small">
+                    <strong>Recomendación:</strong><br>{{ analisis.recomendacion }}
+                </div>
+
+                {% if analisis.riesgos %}
+                <p class="small text-danger mb-0"><strong>Riesgos:</strong> {{ analisis.riesgos }}</p>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning">Análisis pendiente — complete datos mínimos.</div>
+        {% endif %}
+
+        {% if similares %}
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white fw-semibold">Similares en la zona</div>
+            <ul class="list-group list-group-flush">
+                {% for s in similares %}
+                <li class="list-group-item">
+                    <a href="{% url 'propiedad_detalle' s.pk %}">{{ s.titulo|truncatechars:35 }}</a>
+                    <span class="float-end">${{ s.precio_publicado|floatformat:0 }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

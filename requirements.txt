@@ -1,0 +1,34 @@
+# Casa Verde - Plataforma de Oportunidades Inmobiliarias
+# Fase 1-2: Core
+Django>=5.0,<7.0
+django-extensions>=3.2
+python-decouple>=3.8
+Pillow>=10.0
+
+# Fase 2: Análisis de datos
+pandas>=2.0
+numpy>=1.24
+
+# Fase 3: Gráficas
+matplotlib>=3.7
+plotly>=5.18
+
+# Fase 4: Scraping y automatización
+beautifulsoup4>=4.12
+requests>=2.31
+lxml>=5.0
+# scrapy>=2.11
+playwright>=1.40
+# celery>=5.3
+# redis>=5.0
+
+# Fase 5: Alertas
+# twilio>=8.0
+
+# Fase 6: Reportes
+openpyxl>=3.1
+# reportlab>=4.0
+
+# Producción (Fase posterior)
+# psycopg2-binary>=2.9
+# gunicorn>=21.0

@@ -1,0 +1,82 @@
+{% extends 'base/base.html' %}
+{% block title %}Configurar alertas — {{ CASA_VERDE.NOMBRE }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <h1 class="h3 mb-4"><i class="bi bi-bell-fill"></i> Configuración de alertas</h1>
+
+        <div class="alert alert-info">
+            <strong>Recomendación de costos:</strong>
+            <ul class="mb-0 mt-2">
+                <li><strong>Gratis:</strong> Notificaciones en la app + <strong>Email</strong> + <strong>Telegram</strong></li>
+                <li><strong>Pago:</strong> WhatsApp vía Twilio (~$0.05 USD por mensaje) — solo si el volumen es bajo</li>
+            </ul>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold">Tu canal preferido</div>
+            <div class="card-body">
+                <form method="post">{% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Canal principal</label>
+                        {{ form.canal_alerta_preferido }}
+                        <div class="form-text">Email + Telegram es la mejor combinación: gratis y llega al celular al instante.</div>
+                    </div>
+
+                    <div class="form-check mb-2">
+                        {{ form.notificaciones_email }}
+                        <label class="form-check-label">Recibir por correo electrónico</label>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        {{ form.notificaciones_telegram }}
+                        <label class="form-check-label">Recibir por Telegram</label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Telegram Chat ID</label>
+                        {{ form.telegram_chat_id }}
+                        <div class="form-text">
+                            1. Busca <strong>@userinfobot</strong> en Telegram y envía /start<br>
+                            2. Copia tu ID numérico aquí<br>
+                            3. Si usas bot propio, inicia conversación con el bot primero
+                            {% if not telegram_activo %}
+                            <br><span class="text-warning">⚠ Token del bot no configurado en el servidor (TELEGRAM_BOT_TOKEN)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        {{ form.alertas_solo_prioritarias }}
+                        <label class="form-check-label">Solo oportunidades prioritarias (semáforo verde)</label>
+                    </div>
+
+                    <div class="form-check mb-4 text-muted">
+                        {{ form.notificaciones_whatsapp }}
+                        <label class="form-check-label">WhatsApp (Twilio — de pago, deshabilitado)</label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-verde">Guardar preferencias</button>
+                        <button type="submit" name="enviar_prueba" value="1" class="btn btn-outline-secondary">
+                            Enviar alerta de prueba
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-semibold">Cuándo recibes alertas</div>
+            <div class="card-body small">
+                <ul>
+                    <li>Nueva oportunidad en tu zona de búsqueda</li>
+                    <li>Descuento relevante vs mercado</li>
+                    <li>Baja de precio en propiedad registrada</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

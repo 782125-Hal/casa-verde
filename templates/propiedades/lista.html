@@ -1,0 +1,94 @@
+{% extends 'base/base.html' %}
+{% block title %}Propiedades — {{ CASA_VERDE.NOMBRE }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0"><i class="bi bi-buildings"></i> Propiedades</h1>
+    <a href="/admin/propiedades/propiedad/add/" class="btn btn-verde btn-sm">+ Capturar</a>
+</div>
+
+<form method="get" class="row g-2 mb-4 align-items-center">
+    <div class="col-auto">
+        <select name="zona" class="form-select form-select-sm">
+            <option value="">Todas las zonas</option>
+            {% for z in zonas %}
+            <option value="{{ z.pk }}" {% if request.GET.zona == z.pk|stringformat:"s" %}selected{% endif %}>{{ z.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <select name="semaforo" class="form-select form-select-sm">
+            <option value="">Semáforo</option>
+            <option value="verde" {% if request.GET.semaforo == 'verde' %}selected{% endif %}>Verde</option>
+            <option value="amarillo" {% if request.GET.semaforo == 'amarillo' %}selected{% endif %}>Amarillo</option>
+            <option value="rojo" {% if request.GET.semaforo == 'rojo' %}selected{% endif %}>Rojo</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <select name="tipo" class="form-select form-select-sm">
+            <option value="">Tipo</option>
+            <option value="casa">Casa</option>
+            <option value="terreno">Terreno</option>
+            <option value="departamento">Departamento</option>
+            <option value="local">Local</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Filtrar</button>
+    </div>
+    <div class="col-auto ms-auto">
+        <a href="{% url 'exportar_csv' %}" class="btn btn-sm btn-outline-success"><i class="bi bi-download"></i> CSV</a>
+    </div>
+</form>
+
+<div class="row g-3">
+    {% for p in propiedades %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100 shadow-sm propiedad-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="semaforo-dot semaforo-{{ p.semaforo }}"></span>
+                    <span class="badge bg-light text-dark">{{ p.get_tipo_inmueble_display }}</span>
+                </div>
+                <h5 class="card-title">{{ p.titulo|truncatechars:50 }}</h5>
+                <p class="text-muted small mb-1"><i class="bi bi-geo-alt"></i> {{ p.zona.nombre }}</p>
+                <p class="fs-5 fw-bold text-verde mb-2">${{ p.precio_publicado|floatformat:0 }}</p>
+                {% if p.analisis %}
+                <div class="small">
+                    <span class="badge bg-success">{{ p.analisis.descuento_mercado|floatformat:1 }}% desc.</span>
+                    <span class="badge bg-info text-dark">ROI {{ p.analisis.roi_anualizado|floatformat:1 }}%</span>
+                    {% if p.analisis.presupuesto_remodelacion > 0 %}
+                    <span class="badge bg-warning text-dark" title="Presupuesto de remodelación ({{ p.analisis.get_nivel_remodelacion_aplicado_display }})">
+                        <i class="bi bi-tools"></i> ${{ p.analisis.presupuesto_remodelacion|floatformat:0 }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-footer bg-white">
+                <a href="{% url 'propiedad_detalle' p.pk %}" class="btn btn-sm btn-outline-success w-100">Ver ficha</a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12 text-center text-muted py-5">
+        <i class="bi bi-inbox fs-1"></i>
+        <p>No hay propiedades registradas. <a href="/admin/">Captura la primera</a>.</p>
+    </div>
+    {% endfor %}
+</div>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a></li>
+        {% endif %}
+        <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+        {% if page_obj.has_next %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Siguiente</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

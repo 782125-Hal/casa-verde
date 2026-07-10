@@ -1,0 +1,41 @@
+{% extends 'base/base.html' %}
+{% block title %}Alertas — {{ CASA_VERDE.NOMBRE }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0"><i class="bi bi-bell"></i> Alertas {% if no_leidas %}<span class="badge bg-danger">{{ no_leidas }}</span>{% endif %}</h1>
+    {% if no_leidas %}
+    <form method="post">{% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Marcar todas leídas</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="list-group shadow-sm">
+    {% for a in alertas %}
+    <div class="list-group-item {% if not a.leida %}list-group-item-warning{% endif %}">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <span class="badge bg-secondary">{{ a.get_tipo_display }}</span>
+                {% if not a.leida %}<span class="badge bg-danger">Nueva</span>{% endif %}
+                <p class="mb-1 mt-2">{{ a.mensaje }}</p>
+                <small class="text-muted">{{ a.creada_en|date:"d/m/Y H:i" }}</small>
+            </div>
+            <div class="text-end">
+                {% if a.propiedad %}
+                <a href="{% url 'propiedad_detalle' a.propiedad.pk %}" class="btn btn-sm btn-outline-success">Ver propiedad</a>
+                {% endif %}
+                {% if not a.leida %}
+                <a href="{% url 'alerta_leida' a.pk %}" class="btn btn-sm btn-link">Marcar leída</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="list-group-item text-center text-muted py-5">
+        <i class="bi bi-bell-slash fs-1"></i>
+        <p class="mb-0">Sin alertas por ahora</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
