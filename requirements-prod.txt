@@ -1,0 +1,18 @@
+# Casa Verde — dependencias para el SERVIDOR web (hosting compartido cPanel).
+# Solo lo necesario para servir el sitio (dashboard, propiedades, análisis,
+# presupuesto de remodelación). Excluye librerías pesadas de análisis/scraping
+# (pandas, numpy, matplotlib, plotly, playwright) que no operan en shared hosting
+# y que el sitio web no importa al arrancar.
+#
+# Para desarrollo local con todas las funciones, usa requirements.txt.
+
+Django>=4.2,<4.3           # LTS compatible con Python 3.9 del hosting
+django-extensions>=3.2
+python-decouple>=3.8
+Pillow>=10.0
+whitenoise>=6.6            # sirve archivos estáticos en producción
+
+# Necesarias porque el sitio las importa al arrancar (importación de CSV/URL):
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0

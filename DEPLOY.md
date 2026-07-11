@@ -52,15 +52,16 @@ tu página actual en `marhal.com.mx`.
 
 1. En el **Terminal**, pega el comando `source ... && cd ...` que copiaste (activa
    el entorno virtual de la app).
-2. Instala las dependencias:
+2. Instala las dependencias **ligeras de producción** (rápidas, sin librerías
+   pesadas que no operan en hosting compartido):
 
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements-prod.txt
    ```
 
-   > Esto instala Django y librerías. Las funciones de *scraping* con Playwright
-   > no operan en hosting compartido, pero **el sitio web (dashboard, propiedades,
-   > análisis) sí funciona**. El scraping lo puedes seguir corriendo desde tu Mac.
+   > El sitio web (dashboard, propiedades, análisis, presupuesto de remodelación)
+   > funciona con esto. El *scraping* con Playwright y el análisis con pandas se
+   > siguen corriendo desde tu Mac (usan `requirements.txt` completo).
 
 ## Paso 5 — Configurar el archivo `.env` de producción
 
