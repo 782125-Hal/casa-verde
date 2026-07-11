@@ -6,12 +6,18 @@
     <div>
         <h1 class="h3 mb-0"><i class="bi bi-speedometer2 text-verde"></i> Panel de Control</h1>
         <p class="text-muted small mb-0">
-            <i class="bi bi-geo-alt"></i> {{ CASA_VERDE.CIUDAD_DEFAULT }}, {{ CASA_VERDE.ESTADO_DEFAULT }}
-            — Prioritarias: {% for z in CASA_VERDE.ZONAS_PRIORITARIAS %}{{ z }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            <i class="bi bi-geo-alt"></i>
+            {% for c in ciudades %}{% if ciudad_actual == c.pk %}{{ c.nombre }}{% endif %}{% endfor %}{% if not ciudad_actual %}Todas las ciudades{% endif %}, {{ CASA_VERDE.ESTADO_DEFAULT }}
         </p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
         <form method="get" class="d-flex gap-2">
+            <select name="ciudad" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">Todas las ciudades</option>
+                {% for c in ciudades %}
+                <option value="{{ c.pk }}" {% if ciudad_actual == c.pk %}selected{% endif %}>{{ c.nombre }}</option>
+                {% endfor %}
+            </select>
             <select name="zona" class="form-select form-select-sm" onchange="this.form.submit()">
                 <option value="">Todas las zonas</option>
                 {% for z in zonas %}

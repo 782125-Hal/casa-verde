@@ -9,6 +9,14 @@
 
 <form method="get" class="row g-2 mb-4 align-items-center">
     <div class="col-auto">
+        <select name="ciudad" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">Todas las ciudades</option>
+            {% for c in ciudades %}
+            <option value="{{ c.pk }}" {% if request.GET.ciudad == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
         <select name="zona" class="form-select form-select-sm">
             <option value="">Todas las zonas</option>
             {% for z in zonas %}

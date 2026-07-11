@@ -11,7 +11,7 @@ from django.views.generic import ListView
 from alertas.models import Alerta
 from analisis.forms import ConfiguracionBusquedaForm, ImportarCSVForm, ImportarURLForm
 from analisis.models import AnalisisInversion, ConfiguracionBusqueda
-from geografia.models import ZonaMercado
+from geografia.models import Municipio, ZonaMercado
 from mercado.models import ScrapeEjecucion
 from propiedades.models import Propiedad
 from services.alerta import AlertaService
@@ -24,9 +24,14 @@ from usuarios.forms import PreferenciasAlertaForm
 
 def dashboard(request):
     """Panel de control con filtros y datos para gráficas."""
+    ciudad_id = request.GET.get('ciudad')
     zona_id = request.GET.get('zona')
     propiedades = Propiedad.objects.select_related('zona', 'analisis')
     analisis = AnalisisInversion.objects.select_related('propiedad', 'propiedad__zona')
+
+    if ciudad_id:
+        propiedades = propiedades.filter(zona__municipio_id=ciudad_id)
+        analisis = analisis.filter(propiedad__zona__municipio_id=ciudad_id)
 
     if zona_id:
         propiedades = propiedades.filter(zona_id=zona_id)
@@ -60,11 +65,18 @@ def dashboard(request):
         'propiedad', 'propiedad__zona',
     ).order_by('-creada_en')[:5]
 
-    zonas = ZonaMercado.objects.filter(
-        activa=True, municipio__nombre='Tijuana',
-    ).order_by('nombre')
+    zonas = ZonaMercado.objects.filter(activa=True)
+    if ciudad_id:
+        zonas = zonas.filter(municipio_id=ciudad_id)
+    zonas = zonas.order_by('nombre')
+
+    ciudades = Municipio.objects.filter(
+        zonas__activa=True,
+    ).distinct().order_by('nombre')
 
     context = {
+        'ciudades': ciudades,
+        'ciudad_actual': int(ciudad_id) if ciudad_id else None,
         'total_analizadas': total_analizadas,
         'oportunidades': oportunidades,
         'prioritarias': prioritarias,
@@ -94,10 +106,13 @@ class PropiedadListView(ListView):
 
     def get_queryset(self):
         qs = Propiedad.objects.select_related('zona', 'fuente').prefetch_related('analisis')
+        ciudad = self.request.GET.get('ciudad')
         semaforo = self.request.GET.get('semaforo')
         estatus = self.request.GET.get('estatus')
         tipo = self.request.GET.get('tipo')
         zona = self.request.GET.get('zona')
+        if ciudad:
+            qs = qs.filter(zona__municipio_id=ciudad)
         if semaforo:
             qs = qs.filter(semaforo=semaforo)
         if estatus:
@@ -110,7 +125,15 @@ class PropiedadListView(ListView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx['zonas'] = ZonaMercado.objects.filter(activa=True, municipio__nombre='Tijuana')
+        ciudad = self.request.GET.get('ciudad')
+        zonas = ZonaMercado.objects.filter(activa=True)
+        if ciudad:
+            zonas = zonas.filter(municipio_id=ciudad)
+        ctx['zonas'] = zonas.order_by('nombre')
+        ctx['ciudades'] = Municipio.objects.filter(
+            zonas__activa=True,
+        ).distinct().order_by('nombre')
+        ctx['ciudad_actual'] = int(ciudad) if ciudad else None
         return ctx
 
 
@@ -195,9 +218,7 @@ def busqueda_config(request):
             csv_form = ImportarCSVForm(request.POST, request.FILES)
             if csv_form.is_valid():
                 zonas = {
-                    z.nombre.lower(): z for z in ZonaMercado.objects.filter(
-                        activa=True, municipio__nombre='Tijuana',
-                    )
+                    z.nombre.lower(): z for z in ZonaMercado.objects.filter(activa=True)
                 }
                 try:
                     resultado = CSVImporter.importar(
