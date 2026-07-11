@@ -1,6 +1,7 @@
 # Casa Verde - Plataforma de Oportunidades Inmobiliarias
 # Fase 1-2: Core
-Django>=5.0,<7.0
+# Django 4.2 LTS: compatible con Python 3.9 (versión del hosting cPanel).
+Django>=4.2,<4.3
 django-extensions>=3.2
 python-decouple>=3.8
 Pillow>=10.0
