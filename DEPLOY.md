@@ -1,10 +1,10 @@
-# Despliegue de Casa Verde en cPanel — casaverde.marhal.com.mx
+# Despliegue de Casa Verde en cPanel — max.marhal.com.mx
 
 Guía específica para tu hosting (usuario `marhalco`, dominio `marhal.com.mx`).
 Tu cPanel tiene **Setup Python App**, **Terminal**, **Git Version Control** y
 **SSL activo**, que es todo lo que se necesita.
 
-Resultado final: la app corriendo en `https://casaverde.marhal.com.mx`, sin tocar
+Resultado final: la app corriendo en `https://max.marhal.com.mx`, sin tocar
 tu página actual en `marhal.com.mx`.
 
 > Nota importante: el código sube a GitHub, pero **la base de datos y el `.env`
@@ -16,9 +16,9 @@ tu página actual en `marhal.com.mx`.
 ## Paso 1 — Crear el subdominio
 
 1. cPanel → sección **Domains** → **Domains** → **Create A New Domain**.
-2. Domain: `casaverde.marhal.com.mx`
+2. Domain: `max.marhal.com.mx`
 3. Deja que el "Document Root" se genere solo (algo como
-   `/home/marhalco/casaverde.marhal.com.mx`). No importa cuál sea; la app Python
+   `/home/marhalco/max.marhal.com.mx`). No importa cuál sea; la app Python
    lo gestionará.
 4. **Create**.
 
@@ -41,7 +41,7 @@ tu página actual en `marhal.com.mx`.
 2. Configura:
    - **Python version:** 3.11 (o la 3.10+ más alta disponible)
    - **Application root:** `casa-verde`
-   - **Application URL:** `casaverde.marhal.com.mx`
+   - **Application URL:** `max.marhal.com.mx`
    - **Application startup file:** `passenger_wsgi.py`
    - **Application Entry point:** `application`
 3. **Create**. cPanel crea un entorno virtual y muestra arriba un comando
@@ -78,8 +78,8 @@ tu página actual en `marhal.com.mx`.
    cat > ~/casa-verde/.env <<'EOF'
    SECRET_KEY=PEGA_AQUI_LA_CLAVE_GENERADA
    DEBUG=False
-   ALLOWED_HOSTS=casaverde.marhal.com.mx
-   CSRF_TRUSTED_ORIGINS=https://casaverde.marhal.com.mx
+   ALLOWED_HOSTS=max.marhal.com.mx
+   CSRF_TRUSTED_ORIGINS=https://max.marhal.com.mx
    SECURE_SSL_REDIRECT=True
    EOF
    ```
@@ -111,14 +111,14 @@ Si prefieres llevar las 79 propiedades con las que ya trabajaste:
 ## Paso 8 — Reiniciar y probar
 
 1. cPanel → **Setup Python App** → tu app → botón **Restart**.
-2. Abre `https://casaverde.marhal.com.mx`. Deberías ver el dashboard.
-3. El admin queda en `https://casaverde.marhal.com.mx/admin/`.
+2. Abre `https://max.marhal.com.mx`. Deberías ver el dashboard.
+3. El admin queda en `https://max.marhal.com.mx/admin/`.
 
 ## Paso 9 — HTTPS
 
 Tu cPanel ya muestra SSL activo; AutoSSL suele cubrir el subdominio en minutos. Si
 el candado no aparece, ve a **Security → SSL/TLS Status**, marca
-`casaverde.marhal.com.mx` y ejecuta **Run AutoSSL**.
+`max.marhal.com.mx` y ejecuta **Run AutoSSL**.
 
 ---
 

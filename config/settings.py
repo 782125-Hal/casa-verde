@@ -17,7 +17,7 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 # Orígenes de confianza para CSRF (necesario para el admin/formularios sobre
-# HTTPS en un dominio propio). Ej: https://casaverde.marhal.com.mx
+# HTTPS en un dominio propio). Ej: https://max.marhal.com.mx
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 
 INSTALLED_APPS = [
