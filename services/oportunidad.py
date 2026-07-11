@@ -92,8 +92,10 @@ class OportunidadService:
         descuento = metricas['descuento_mercado']
         roi_anual = metricas['roi_anualizado']
         anos = metricas['anos_recuperacion']
-        tasa = config['tasa_bancaria']
-        desc_min = config['descuento_minimo']
+        # Coercer a Decimal: la config puede venir con floats (p. ej. valores por
+        # defecto de un Usuario recién creado), y mezclar float × Decimal falla.
+        tasa = Decimal(str(config['tasa_bancaria']))
+        desc_min = Decimal(str(config['descuento_minimo']))
         plazo_max = config['plazo_recuperacion_max']
         riesgo = metricas.get('riesgo_total', 1)
 

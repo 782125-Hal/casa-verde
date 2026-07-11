@@ -121,6 +121,19 @@ class IntegracionAnalisisTests(BaseDatosMixin, TestCase):
         # Y estar incluida en la inversión total.
         self.assertGreaterEqual(analisis.inversion_total, prop.precio_publicado + analisis.reparaciones)
 
+    def test_analisis_con_usuario_de_config_float_no_falla(self):
+        """
+        Regresión: un Usuario recién creado tiene descuento_minimo/tasa como
+        float (valor por defecto en memoria). El análisis no debe romper al
+        mezclar float con Decimal en determinar_semaforo.
+        """
+        from usuarios.models import Usuario
+        usuario = Usuario.objects.create(username='inv_prueba')
+        prop = self._propiedad(estado_fisico='regular', capturado_por=usuario)
+        # No debe lanzar TypeError:
+        analisis = OportunidadService.analizar_propiedad(prop, usuario=usuario)
+        self.assertIsNotNone(analisis.semaforo)
+
     def test_mas_remodelacion_reduce_utilidad_y_roi(self):
         """A mayor nivel de obra, menor utilidad y ROI (todo lo demás igual)."""
         prop_ligera = self._propiedad(estado_fisico='regular', nivel_remodelacion='ligera')
