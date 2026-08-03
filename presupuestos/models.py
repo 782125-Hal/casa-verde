@@ -33,6 +33,9 @@ from django.db import models
 
 from presupuestos.choices import (
     CATEGORIA_CHOICES,
+    FUENTE_CAPITAL_ADICIONAL,
+    FUENTE_CONTINGENCIA,
+    FUENTE_ORDEN_CAMBIO_CHOICES,
     DEFAULT_PCT_CONTINGENCIA,
     DEFAULT_PCT_INDIRECTOS,
     DEFAULT_PCT_IVA,
@@ -43,6 +46,7 @@ from presupuestos.choices import (
     TIPO_OBRA_CHOICES,
     TIPO_OBRA_REMODELACION,
     UMBRAL_ALERTA_CONTINGENCIA,
+    UMBRAL_DESVIACION_PARTIDA,
     UNIDAD_CHOICES,
 )
 
@@ -204,8 +208,17 @@ class Presupuesto(models.Model):
 
     @property
     def base_con_contingencia(self) -> Decimal:
-        """Directo + indirectos + contingencia: el techo antes de rebasar (§4.4)."""
-        return self.subtotal_directo + self.monto_indirectos + self.monto_contingencia
+        """El TECHO: pasarlo es rojo (§4.4). Base + la reserva ÍNTEGRA.
+
+        La reserva entra completa porque es dinero que existe y está apartado;
+        aprobar una orden contra ella no lo hace desaparecer, solo lo compromete.
+        Ese compromiso se refleja en ``contingencia_disponible`` y en el semáforo,
+        no bajando el techo —bajarlo contaría el mismo peso dos veces cuando
+        además se gasta—.
+
+        Las órdenes de capital adicional sí lo suben, vía ``presupuesto_base``.
+        """
+        return self.presupuesto_base + self.monto_contingencia
 
     @property
     def monto_utilidad(self) -> Decimal:
@@ -235,7 +248,9 @@ class Presupuesto(models.Model):
         fuera por la misma razón —solo aplica si se factura, y es acreditable—.
 
         Es deliberadamente INDEPENDIENTE de ``pct_utilidad``: si algún día se
-        sube el margen comercial, el ROI no se mueve.
+        sube el margen comercial, el ROI no se mueve. Sí depende de las órdenes
+        de cambio aprobadas con capital adicional: eso es desembolso real nuevo y
+        el ROI debe reflejarlo.
         """
         return self.base_con_contingencia
 
@@ -261,33 +276,145 @@ class Presupuesto(models.Model):
         total = self.gastos.aggregate(total=models.Sum('importe_real'))['total']
         return (total or CERO).quantize(Decimal('0.01'))
 
+    def _ordenes_aprobadas(self, fuente=None):
+        qs = self.ordenes_cambio.filter(estado='aprobada')
+        if fuente:
+            qs = qs.filter(fuente=fuente)
+        total = qs.aggregate(total=models.Sum('importe'))['total']
+        return (total or CERO).quantize(Decimal('0.01'))
+
+    @property
+    def monto_ordenes_capital(self) -> Decimal:
+        """Órdenes aprobadas con CAPITAL ADICIONAL: suben el techo aprobado.
+
+        Es dinero nuevo que alguien autorizó a inyectar, así que el presupuesto
+        aprobado crece con ellas.
+        """
+        return self._ordenes_aprobadas(FUENTE_CAPITAL_ADICIONAL)
+
+    @property
+    def monto_ordenes_contingencia(self) -> Decimal:
+        """Órdenes aprobadas CON CARGO A LA RESERVA.
+
+        NO suben el techo: consumen contingencia, que es exactamente para lo que
+        está. Su efecto es acercar el semáforo a amarillo/rojo antes.
+        """
+        return self._ordenes_aprobadas(FUENTE_CONTINGENCIA)
+
+    @property
+    def monto_ordenes_aprobadas(self) -> Decimal:
+        """Todas las aprobadas, sin importar la fuente. KPI del §4.6."""
+        return self._ordenes_aprobadas()
+
+    @property
+    def ordenes_aprobadas_count(self) -> int:
+        return self.ordenes_cambio.filter(estado='aprobada').count()
+
+    @property
+    def contingencia_disponible(self) -> Decimal:
+        """Reserva que queda tras las órdenes ya cargadas a ella. Nunca negativa:
+        si se aprobó de más, la reserva está agotada, no en rojo dos veces."""
+        return max(CERO, self.monto_contingencia - self.monto_ordenes_contingencia)
+
     @property
     def presupuesto_base(self) -> Decimal:
-        """Directo + indirectos: lo que NO debería rebasarse sin tocar contingencia."""
-        return self.subtotal_directo + self.monto_indirectos
+        """Gasto esperado SIN tocar la reserva: directo + indirectos + capital
+        adicional aprobado.
+
+        Las de capital adicional suman porque son dinero nuevo autorizado; sin
+        ellas, un cambio legítimamente aprobado empujaría el semáforo a amarillo
+        de inmediato y el aviso dejaría de significar "cuidado".
+
+        Las cargadas a contingencia NO suman aquí: si lo hicieran, gastarlas
+        dejaría el semáforo en verde, y el §4.4 define el amarillo justamente
+        como "consumiendo contingencia".
+        """
+        return self.subtotal_directo + self.monto_indirectos + self.monto_ordenes_capital
+
+    @property
+    def contingencia_consumida(self) -> Decimal:
+        """Reserva comprometida: el MAYOR entre lo autorizado y lo ya sobregirado.
+
+        No se suman: una orden aprobada contra la reserva se acaba pagando, y ese
+        pago aparece como sobregiro del gasto. Sumar ambas contaría dos veces el
+        mismo dinero. Se toma el máximo porque cada vía puede ir por delante: la
+        orden autoriza antes de gastar, y un sobrecosto sin orden gasta sin
+        autorizar.
+        """
+        sobregiro = max(CERO, self.gasto_real - self.presupuesto_base)
+        return max(self.monto_ordenes_contingencia, sobregiro)
 
     @property
     def contingencia_consumida_pct(self) -> Decimal:
         """Qué tanto de la reserva ya se usó. Al 70% es alerta temprana (§4.1)."""
         if self.monto_contingencia <= CERO:
             return CERO
-        exceso = self.gasto_real - self.presupuesto_base
-        if exceso <= CERO:
-            return CERO
         return min(
-            (exceso / self.monto_contingencia * CIEN).quantize(Decimal('0.01')), CIEN
+            (self.contingencia_consumida / self.monto_contingencia * CIEN).quantize(
+                Decimal('0.01'),
+            ),
+            CIEN,
         )
 
     @property
     def semaforo(self) -> str:
         """Salud del presupuesto (§4.4). Gris mientras no haya gasto registrado."""
-        if self.gasto_real <= CERO:
+        if self.gasto_real <= CERO and self.monto_ordenes_contingencia <= CERO:
             return 'gris'
+        if self.gasto_real > self.base_con_contingencia:
+            return 'rojo'
+        # Comprometer reserva YA es amarillo, aunque todavía no se haya pagado:
+        # el §4.4 define el amarillo como "consumiendo contingencia".
+        if self.contingencia_consumida > CERO:
+            return 'amarillo'
         if self.gasto_real <= self.presupuesto_base:
             return 'verde'
         if self.gasto_real <= self.base_con_contingencia:
             return 'amarillo'
         return 'rojo'
+
+    # --- KPIs semanales (§4.6) --------------------------------------------------
+
+    @property
+    def desviacion_acumulada(self) -> Decimal:
+        """Gasto real − presupuesto aprobado. Positivo = se pasó."""
+        return (self.gasto_real - self.presupuesto_base).quantize(Decimal('0.01'))
+
+    @property
+    def desviacion_acumulada_pct(self) -> Decimal:
+        if self.presupuesto_base <= CERO:
+            return CERO
+        return (self.desviacion_acumulada / self.presupuesto_base * CIEN).quantize(
+            Decimal('0.01'),
+        )
+
+    @property
+    def avance_gasto_pct(self) -> Decimal:
+        """Qué proporción del techo (base + contingencia) ya se gastó.
+
+        El §4.3 lo contrasta con el avance FÍSICO de obra: si el dinero va al 80%
+        y la obra al 50%, hay problema ahora, con tiempo de corregir. El avance
+        físico no se captura todavía, así que aquí solo se expone el del gasto.
+        """
+        techo = self.base_con_contingencia
+        if techo <= CERO:
+            return CERO
+        return min((self.gasto_real / techo * CIEN).quantize(Decimal('0.01')), Decimal('999'))
+
+    @property
+    def costo_real_m2(self) -> Decimal | None:
+        """Costo real por m², para contrastarlo con el estimado paramétrico."""
+        if not self.area_m2 or self.gasto_real <= CERO:
+            return None
+        return (self.gasto_real / self.area_m2).quantize(Decimal('0.01'))
+
+    @property
+    def partidas_desviadas(self) -> list:
+        """Partidas que se pasaron más del umbral, de mayor a menor desviación."""
+        return sorted(
+            (p for p in self.partidas.all() if p.excede_umbral),
+            key=lambda p: p.desviacion, reverse=True,
+        )
 
     @property
     def semaforo_display(self) -> str:
@@ -359,6 +486,22 @@ class PartidaPresupuesto(models.Model):
         """Gasto real − presupuestado. Positivo = se pasó."""
         return self.gasto_real - self.importe
 
+    @property
+    def desviacion_pct(self) -> Decimal:
+        """% de desviación sobre lo presupuestado.
+
+        Sin importe presupuestado no hay porcentaje que calcular: un gasto contra
+        una partida en cero es infinito, y mostrarlo como 100% mentiría.
+        """
+        if self.importe <= CERO:
+            return CERO
+        return (self.desviacion / self.importe * CIEN).quantize(Decimal('0.01'))
+
+    @property
+    def excede_umbral(self) -> bool:
+        """¿Se pasó más del umbral que dispara alerta por partida? (§4.4)"""
+        return self.desviacion > CERO and self.desviacion_pct >= UMBRAL_DESVIACION_PARTIDA
+
 
 class RegistroGasto(models.Model):
     """Gasto real durante la obra (§4.3).
@@ -416,6 +559,11 @@ class OrdenCambio(models.Model):
     importe = models.DecimalField(
         max_digits=14, decimal_places=2,
         help_text='MXN. Negativo si el cambio REDUCE el alcance',
+    )
+    fuente = models.CharField(
+        max_length=20, choices=FUENTE_ORDEN_CAMBIO_CHOICES, default='contingencia',
+        help_text='De dónde sale el dinero (§4.2). Solo "adicional" amplía el '
+                  'presupuesto aprobado; con cargo a contingencia consume la reserva.',
     )
     estado = models.CharField(
         max_length=20, choices=ESTADO_ORDEN_CAMBIO_CHOICES, default='solicitada',

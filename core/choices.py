@@ -57,6 +57,10 @@ TIPO_ALERTA_CHOICES = [
     ('roi_atractivo', 'ROI atractivo'),
     ('baja_precio', 'Baja de precio'),
     ('nueva_zona', 'Nueva propiedad en zona'),
+    # Control de obra (Fase 4 del módulo de presupuestos, §4.4 del diseño)
+    ('presupuesto_contingencia', 'Presupuesto consumiendo contingencia'),
+    ('presupuesto_rebasado', 'Presupuesto rebasado'),
+    ('partida_desviada', 'Partida con desviación relevante'),
 ]
 
 CANAL_ALERTA_CHOICES = [

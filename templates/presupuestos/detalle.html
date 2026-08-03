@@ -188,6 +188,188 @@
                 {% endif %}
             </div>
         </div>
+
+        <!-- ================= Control de obra (Fase 4) ======================= -->
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">
+                    <i class="bi bi-clipboard-check"></i> Control de obra
+                    <span class="semaforo-dot semaforo-{{ presupuesto.semaforo }} ms-2"></span>
+                    <span class="small text-muted">{{ presupuesto.semaforo_display }}</span>
+                </span>
+                <span>
+                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
+                            data-bs-target="#modalOrden" onclick="prepararOrdenAlta()">+ Orden de cambio</button>
+                    <button class="btn btn-sm btn-verde" data-bs-toggle="modal"
+                            data-bs-target="#modalGasto" onclick="prepararGastoAlta()">+ Registrar gasto</button>
+                </span>
+            </div>
+
+            <!-- KPIs del §4.6 -->
+            <div class="card-body border-bottom">
+                <div class="row g-3 text-center">
+                    <div class="col-6 col-md-3">
+                        <div class="small text-muted">Gasto real</div>
+                        <div class="fs-6 fw-bold">${{ presupuesto.gasto_real|floatformat:2 }}</div>
+                        <div class="small text-muted">{{ presupuesto.avance_gasto_pct|floatformat:1 }}% del techo</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="small text-muted">Desviación acumulada</div>
+                        <div class="fs-6 fw-bold {% if presupuesto.desviacion_acumulada > 0 %}text-danger{% else %}text-success{% endif %}">
+                            ${{ presupuesto.desviacion_acumulada|floatformat:2 }}
+                        </div>
+                        <div class="small text-muted">{{ presupuesto.desviacion_acumulada_pct|floatformat:1 }}%</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="small text-muted">Contingencia consumida</div>
+                        <div class="fs-6 fw-bold {% if presupuesto.contingencia_consumida_pct >= 70 %}text-danger{% endif %}">
+                            {{ presupuesto.contingencia_consumida_pct|floatformat:1 }}%
+                        </div>
+                        <div class="small text-muted">quedan ${{ presupuesto.contingencia_disponible|floatformat:2 }}</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="small text-muted">Costo real / m²</div>
+                        <div class="fs-6 fw-bold">
+                            {% if presupuesto.costo_real_m2 %}${{ presupuesto.costo_real_m2|floatformat:2 }}{% else %}—{% endif %}
+                        </div>
+                        <div class="small text-muted">
+                            {{ presupuesto.ordenes_aprobadas_count }} orden(es) · ${{ presupuesto.monto_ordenes_aprobadas|floatformat:0 }}
+                        </div>
+                    </div>
+                </div>
+                {% if presupuesto.contingencia_consumida_pct >= 70 %}
+                <div class="alert alert-warning py-2 mt-3 mb-0 small">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Consumida el {{ presupuesto.contingencia_consumida_pct|floatformat:0 }}% de la reserva.
+                    El diseño marca el 70% como señal de alerta temprana.
+                </div>
+                {% endif %}
+                {% if presupuesto.partidas_desviadas %}
+                <div class="alert alert-danger py-2 mt-3 mb-0 small">
+                    <i class="bi bi-graph-up"></i>
+                    {{ presupuesto.partidas_desviadas|length }} partida(s) desviadas más del {{ umbral_partida }}%:
+                    {% for p in presupuesto.partidas_desviadas|slice:":3" %}
+                    <strong>{{ p.descripcion|truncatechars:34 }}</strong> (+{{ p.desviacion_pct|floatformat:0 }}%){% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Gastos reales -->
+            <div class="card-body border-bottom p-0">
+                <div class="px-3 pt-3 fw-semibold small text-uppercase text-muted">Gastos reales</div>
+                {% if gastos %}
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Fecha</th><th>Descripción</th><th>Partida</th><th>Proveedor</th>
+                            <th class="text-end">Importe</th><th>Factura</th><th style="width:80px"></th></tr>
+                    </thead>
+                    <tbody>
+                        {% for g in gastos %}
+                        <tr>
+                            <td class="small">{{ g.fecha|date:"d/M/Y" }}</td>
+                            <td>{{ g.descripcion|truncatechars:40 }}</td>
+                            <td class="small">{% if g.partida %}{{ g.partida.descripcion|truncatechars:28 }}{% else %}<span class="text-muted">sin imputar</span>{% endif %}</td>
+                            <td class="small">{{ g.proveedor|default:"—" }}</td>
+                            <td class="text-end">${{ g.importe_real|floatformat:2 }}</td>
+                            <td class="small">{{ g.factura|default:"—" }}</td>
+                            <td class="text-end">
+                                <form method="post" action="{% url 'gasto_eliminar' presupuesto.pk g.pk %}"
+                                      class="d-inline" onsubmit="return confirm('¿Eliminar este gasto?');">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted small px-3 py-3 mb-0">Sin gastos registrados todavía.</p>
+                {% endif %}
+            </div>
+
+            <!-- Desviación por partida (§4.3) -->
+            {% if grupos and presupuesto.gasto_real > 0 %}
+            <div class="card-body border-bottom p-0">
+                <div class="px-3 pt-3 fw-semibold small text-uppercase text-muted">Real vs. presupuestado por partida</div>
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Partida</th><th class="text-end">Presupuestado</th>
+                            <th class="text-end">Real</th><th class="text-end">Desviación</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for grupo in grupos %}{% for p in grupo.partidas %}{% if p.gasto_real > 0 %}
+                        <tr {% if p.excede_umbral %}class="table-danger"{% endif %}>
+                            <td>{{ p.descripcion|truncatechars:44 }}</td>
+                            <td class="text-end">${{ p.importe|floatformat:2 }}</td>
+                            <td class="text-end">${{ p.gasto_real|floatformat:2 }}</td>
+                            <td class="text-end {% if p.desviacion > 0 %}text-danger{% else %}text-success{% endif %}">
+                                ${{ p.desviacion|floatformat:2 }} ({{ p.desviacion_pct|floatformat:0 }}%)
+                            </td>
+                        </tr>
+                        {% endif %}{% endfor %}{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <!-- Órdenes de cambio -->
+            <div class="card-body p-0">
+                <div class="px-3 pt-3 fw-semibold small text-uppercase text-muted">Órdenes de cambio</div>
+                {% if ordenes %}
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Fecha</th><th>Descripción</th><th>Fuente</th>
+                            <th class="text-end">Importe</th><th>Estado</th><th style="width:150px"></th></tr>
+                    </thead>
+                    <tbody>
+                        {% for o in ordenes %}
+                        <tr>
+                            <td class="small">{{ o.fecha|date:"d/M/Y" }}</td>
+                            <td>{{ o.descripcion|truncatechars:38 }}
+                                <div class="small text-muted">{{ o.motivo|truncatechars:56 }}</div></td>
+                            <td class="small">
+                                {% if o.fuente == 'capital_adicional' %}
+                                <span class="badge bg-info text-dark">capital adicional</span>
+                                {% else %}<span class="badge bg-secondary">contingencia</span>{% endif %}
+                            </td>
+                            <td class="text-end">${{ o.importe|floatformat:2 }}</td>
+                            <td>
+                                {% if o.estado == 'aprobada' %}<span class="badge bg-success">aprobada</span>
+                                {% elif o.estado == 'rechazada' %}<span class="badge bg-danger">rechazada</span>
+                                {% else %}<span class="badge bg-warning text-dark">solicitada</span>{% endif %}
+                                {% if o.aprobado_por %}<div class="small text-muted">{{ o.aprobado_por.username }}</div>{% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if o.estado == 'solicitada' %}
+                                <form method="post" action="{% url 'orden_resolver' presupuesto.pk o.pk 'aprobada' %}" class="d-inline">
+                                    {% csrf_token %}<button class="btn btn-sm btn-outline-success" title="Aprobar"><i class="bi bi-check-lg"></i></button>
+                                </form>
+                                <form method="post" action="{% url 'orden_resolver' presupuesto.pk o.pk 'rechazada' %}" class="d-inline">
+                                    {% csrf_token %}<button class="btn btn-sm btn-outline-warning" title="Rechazar"><i class="bi bi-x-lg"></i></button>
+                                </form>
+                                {% endif %}
+                                <form method="post" action="{% url 'orden_eliminar' presupuesto.pk o.pk %}" class="d-inline"
+                                      onsubmit="return confirm('¿Eliminar esta orden?');">
+                                    {% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="p-3 small text-muted border-top">
+                    Aprobar con <strong>capital adicional</strong> sube el presupuesto aprobado;
+                    con cargo a <strong>contingencia</strong> consume reserva y acerca el amarillo.
+                </div>
+                {% else %}
+                <p class="text-muted small px-3 py-3 mb-0">
+                    Sin órdenes de cambio. Ningún cambio de alcance debería ejecutarse sin una.
+                </p>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     <!-- ================= Columna derecha: desglose en vivo =================== -->
@@ -387,6 +569,110 @@
         </form>
     </div>
 </div>
+
+<!-- ===================== Modal: gasto real (§4.3) ========================== -->
+<div class="modal fade" id="modalGasto" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post" id="formGasto" action="{% url 'gasto_crear' presupuesto.pk %}">
+            {% csrf_token %}
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Registrar gasto real</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ gasto_form.fecha.id_for_label }}">Fecha</label>
+                            {{ gasto_form.fecha }}
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="{{ gasto_form.descripcion.id_for_label }}">Descripción</label>
+                            {{ gasto_form.descripcion }}
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="{{ gasto_form.partida.id_for_label }}">Imputar a partida</label>
+                            {{ gasto_form.partida }}
+                            <div class="form-text">Opcional. Sin partida cuenta al total, pero no a la desviación por renglón.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ gasto_form.importe_real.id_for_label }}">Importe pagado</label>
+                            {{ gasto_form.importe_real }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ gasto_form.proveedor.id_for_label }}">Proveedor</label>
+                            {{ gasto_form.proveedor }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ gasto_form.factura.id_for_label }}">Factura</label>
+                            {{ gasto_form.factura }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="{{ gasto_form.notas.id_for_label }}">Notas</label>
+                            {{ gasto_form.notas }}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-verde">Guardar gasto</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ================== Modal: orden de cambio (§4.2) ======================== -->
+<div class="modal fade" id="modalOrden" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post" id="formOrden" action="{% url 'orden_crear' presupuesto.pk %}">
+            {% csrf_token %}
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Orden de cambio</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light border small">
+                        Ningún cambio de alcance debería ejecutarse sin una orden que diga
+                        <strong>qué se agrega, cuánto cuesta y de dónde sale el dinero</strong>.
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ orden_form.fecha.id_for_label }}">Fecha</label>
+                            {{ orden_form.fecha }}
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="{{ orden_form.descripcion.id_for_label }}">Descripción</label>
+                            {{ orden_form.descripcion }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="{{ orden_form.motivo.id_for_label }}">Motivo</label>
+                            {{ orden_form.motivo }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ orden_form.importe.id_for_label }}">Importe</label>
+                            {{ orden_form.importe }}
+                            <div class="form-text">Negativo si REDUCE alcance.</div>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="{{ orden_form.fuente.id_for_label }}">¿De dónde sale el dinero?</label>
+                            {{ orden_form.fuente }}
+                            <div class="form-text">
+                                Contingencia consume reserva y acerca el amarillo; capital adicional
+                                sube el presupuesto aprobado.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-verde">Guardar como solicitada</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -506,6 +792,16 @@ function importeModal() {
         pesos(centavos(num(campoCantidad.value) * num(campoPu.value)));
 }
 [campoCantidad, campoPu].forEach((c) => c.addEventListener('input', importeModal));
+
+function prepararGastoAlta() {
+    document.getElementById('formGasto').action = "{% url 'gasto_crear' presupuesto.pk %}";
+}
+
+function prepararOrdenAlta() {
+    // Se crea siempre como "solicitada": aprobar mueve los techos y es un acto
+    // aparte, con su propio botón y su propio POST.
+    document.getElementById('formOrden').action = "{% url 'orden_crear' presupuesto.pk %}";
+}
 
 function prepararAlta() {
     formPartida.action = URL_PARTIDA_CREAR;

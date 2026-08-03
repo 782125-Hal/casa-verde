@@ -2,7 +2,12 @@
 from django import forms
 
 from presupuestos.choices import DEFAULT_PCT_CONTINGENCIA
-from presupuestos.models import PartidaPresupuesto, Presupuesto
+from presupuestos.models import (
+    OrdenCambio,
+    PartidaPresupuesto,
+    Presupuesto,
+    RegistroGasto,
+)
 from presupuestos.plantillas import PLANTILLA_CHOICES
 from propiedades.models import Propiedad
 
@@ -143,3 +148,66 @@ class PartidaForm(forms.ModelForm):
             'orden': forms.NumberInput(attrs={**_INPUT, 'min': '0'}),
             'notas': forms.Textarea(attrs={**_INPUT, 'rows': 2}),
         }
+
+
+class GastoForm(forms.ModelForm):
+    """Captura de gasto real (§4.3). La partida es opcional: hay gastos que no
+    caen en ninguna (un permiso, un flete) y aun así cuentan para el total."""
+
+    class Meta:
+        model = RegistroGasto
+        fields = ['fecha', 'descripcion', 'partida', 'proveedor', 'importe_real', 'factura', 'notas']
+        widgets = {
+            'fecha': forms.DateInput(attrs={**_INPUT, 'type': 'date'}),
+            'descripcion': forms.TextInput(attrs={**_INPUT, 'placeholder': 'En qué se gastó'}),
+            'partida': forms.Select(attrs=_SELECT),
+            'proveedor': forms.TextInput(attrs=_INPUT),
+            'importe_real': forms.NumberInput(attrs={**_INPUT, 'step': '0.01', 'min': '0'}),
+            'factura': forms.TextInput(attrs={**_INPUT, 'placeholder': 'Folio o UUID'}),
+            'notas': forms.Textarea(attrs={**_INPUT, 'rows': 2}),
+        }
+
+    def __init__(self, *args, presupuesto=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Solo las partidas de ESTE presupuesto: ofrecer las de otro permitiría
+        # imputar un gasto a una obra distinta.
+        alcance = presupuesto or getattr(self.instance, 'presupuesto', None)
+        self.fields['partida'].queryset = (
+            PartidaPresupuesto.objects.filter(presupuesto=alcance)
+            if alcance else PartidaPresupuesto.objects.none()
+        )
+        self.fields['partida'].required = False
+        self.fields['partida'].empty_label = 'Sin imputar a una partida'
+
+
+class OrdenCambioForm(forms.ModelForm):
+    """Orden de cambio (§4.2). El `motivo` y la `fuente` son el corazón del
+    control: obligan a decir qué se agrega y de dónde sale el dinero."""
+
+    class Meta:
+        model = OrdenCambio
+        fields = ['fecha', 'descripcion', 'motivo', 'importe', 'fuente', 'estado',
+                  'aprobado_por', 'fecha_resolucion']
+        widgets = {
+            'fecha': forms.DateInput(attrs={**_INPUT, 'type': 'date'}),
+            'descripcion': forms.TextInput(attrs={**_INPUT, 'placeholder': 'Qué se agrega o cambia'}),
+            'motivo': forms.Textarea(attrs={**_INPUT, 'rows': 2,
+                                            'placeholder': 'Imprevisto real o mejora: la contingencia solo cubre lo primero'}),
+            'importe': forms.NumberInput(attrs={**_INPUT, 'step': '0.01'}),
+            'fuente': forms.Select(attrs=_SELECT),
+            'estado': forms.Select(attrs=_SELECT),
+            'aprobado_por': forms.Select(attrs=_SELECT),
+            'fecha_resolucion': forms.DateInput(attrs={**_INPUT, 'type': 'date'}),
+        }
+
+    def clean(self):
+        """Una orden resuelta necesita quién y cuándo: sin eso no hay trazabilidad,
+        que es justamente lo que el §4.2 pide documentar."""
+        datos = super().clean()
+        if datos.get('estado') in ('aprobada', 'rechazada'):
+            if not datos.get('fecha_resolucion'):
+                datos['fecha_resolucion'] = datos.get('fecha')
+                self.cleaned_data['fecha_resolucion'] = datos['fecha_resolucion']
+            if not datos.get('aprobado_por'):
+                self.add_error('aprobado_por', 'Indica quién resolvió la orden.')
+        return datos

@@ -15,7 +15,28 @@ sale temprano ante ese conjunto de campos. La cadena se corta ahí.
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
-from presupuestos.models import OrdenCambio, PartidaPresupuesto, Presupuesto
+from presupuestos.models import (
+    OrdenCambio,
+    PartidaPresupuesto,
+    Presupuesto,
+    RegistroGasto,
+)
+
+
+def _relacion_viva(instancia, campo):
+    """Devuelve la relación, o None si ya desapareció.
+
+    Hace falta en los ``post_delete``: al borrar un presupuesto, Django cascadea
+    partidas y gastos, y cuando la señal del hijo se ejecuta el padre puede haber
+    desaparecido ya. Sin esta guarda, acceder a la FK lanza ``DoesNotExist`` y
+    revienta el borrado entero.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+
+    try:
+        return getattr(instancia, campo)
+    except ObjectDoesNotExist:
+        return None
 
 
 def analizar(propiedad):
@@ -35,9 +56,13 @@ def recalcular_roi(presupuesto):
 
     Un escenario alternativo ("premium") no debe mover el semáforo mientras no se
     marque activo, así que los inactivos no disparan nada.
+
+    La FK se lee con guarda: esto corre también desde ``post_delete`` de partidas
+    y órdenes, y si lo que se está borrando es la PROPIEDAD, la cascada ya se la
+    llevó cuando llega la señal del nieto.
     """
     if presupuesto.es_activo:
-        analizar(presupuesto.propiedad)
+        analizar(_relacion_viva(presupuesto, 'propiedad'))
 
 
 @receiver(pre_save, sender=Presupuesto)
@@ -74,17 +99,66 @@ def presupuesto_borrado(sender, instance, **kwargs):
     paramétrico, que es justo lo que se quiere persistir.
     """
     if instance.es_activo:
-        analizar(instance.propiedad)
+        # También aquí: si lo que se está borrando es la PROPIEDAD, la cascada ya
+        # se la llevó y no hay nada que reanalizar.
+        analizar(_relacion_viva(instance, 'propiedad'))
 
 
 @receiver(post_save, sender=PartidaPresupuesto)
 @receiver(post_delete, sender=PartidaPresupuesto)
 def partida_cambiada(sender, instance, **kwargs):
     """Una partida cambia el total, y el total es lo que alimenta el ROI."""
-    recalcular_roi(instance.presupuesto)
+    presupuesto = _relacion_viva(instance, 'presupuesto')
+    if presupuesto is not None:
+        recalcular_roi(presupuesto)
 
 
-# OrdenCambio se importa aquí a propósito aunque todavía no dispare nada: en
-# Fase 4, cuando una orden aprobada modifique el alcance, este es el lugar donde
-# enganchar su recálculo. Dejarlo señalado evita que se resuelva por otro lado.
-__all__ = ['recalcular_roi', 'OrdenCambio']
+def revisar_salud(presupuesto):
+    """Evalúa el control de obra y avisa si hace falta (§4.4).
+
+    El servicio decide si corresponde alertar y deduplica; aquí solo se elige
+    CUÁNDO revisar: cada vez que cambia el gasto real o una orden de cambio.
+    """
+    from services.alerta import AlertaService
+
+    AlertaService.notificar_presupuesto(presupuesto)
+
+
+@receiver(post_save, sender=RegistroGasto)
+@receiver(post_delete, sender=RegistroGasto)
+def gasto_registrado(sender, instance, **kwargs):
+    """El gasto real es lo que mueve el semáforo de desviación.
+
+    No toca el ROI: lo presupuestado no cambia porque se gaste más. El §4.6 sí
+    contempla un "ROI proyectado con costos reales", pero eso es un indicador
+    aparte, no una reescritura del análisis de la propiedad.
+    """
+    presupuesto = _relacion_viva(instance, 'presupuesto')
+    if presupuesto is None:
+        return
+    revisar_salud(presupuesto)
+    if instance.partida_id:
+        from services.alerta import AlertaService
+
+        partida = _relacion_viva(instance, 'partida')
+        if partida is not None:
+            AlertaService.notificar_partida_desviada(partida)
+
+
+@receiver(post_save, sender=OrdenCambio)
+@receiver(post_delete, sender=OrdenCambio)
+def orden_cambio_guardada(sender, instance, **kwargs):
+    """Una orden APROBADA mueve los techos: con capital adicional sube el
+    presupuesto aprobado, y con cargo a contingencia consume reserva.
+
+    Como el techo con capital adicional también cambia el costo del ROI, se
+    recalcula el análisis además de revisar la salud.
+    """
+    presupuesto = _relacion_viva(instance, 'presupuesto')
+    if presupuesto is None:
+        return
+    recalcular_roi(presupuesto)
+    revisar_salud(presupuesto)
+
+
+__all__ = ['recalcular_roi', 'revisar_salud']

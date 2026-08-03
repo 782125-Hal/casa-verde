@@ -14,6 +14,7 @@ ofrece el estimado paramétrico de 1 clic.
 
 Fuera de alcance: gastos reales y órdenes de cambio (Fase 4), exportación (Fase 5).
 """
+from datetime import date
 from decimal import Decimal
 
 from django.contrib import messages
@@ -29,13 +30,32 @@ from presupuestos.choices import (
     CATEGORIA_CHOICES,
     ESTADO_PRESUPUESTO_CHOICES,
     NIVEL_PARAMETRICO_A_CODIGO,
+    UMBRAL_DESVIACION_PARTIDA,
     TIPO_OBRA_CHOICES,
     TIPO_OBRA_REMODELACION,
 )
-from presupuestos.forms import PartidaForm, PresupuestoCrearForm, PresupuestoForm
-from presupuestos.models import CatalogoConcepto, PartidaPresupuesto, Presupuesto
+from presupuestos.choices import FUENTE_CAPITAL_ADICIONAL
+from presupuestos.forms import (
+    GastoForm,
+    OrdenCambioForm,
+    PartidaForm,
+    PresupuestoCrearForm,
+    PresupuestoForm,
+)
+from presupuestos.models import (
+    CatalogoConcepto,
+    OrdenCambio,
+    PartidaPresupuesto,
+    Presupuesto,
+    RegistroGasto,
+)
 from presupuestos.plantillas import aplicar_plantilla
 from propiedades.models import Propiedad
+
+def _errores(form) -> str:
+    """Errores del formulario en una línea, para el mensaje flash."""
+    return '; '.join(f'{campo}: {", ".join(msgs)}' for campo, msgs in form.errors.items())
+
 
 _ETIQUETA_CATEGORIA = dict(CATEGORIA_CHOICES)
 _ETIQUETA_NIVEL = {
@@ -147,6 +167,11 @@ def presupuesto_detalle(request, pk):
         'partida_form': PartidaForm(),
         'categorias': CATEGORIA_CHOICES,
         'impacto': _impacto_en_roi(presupuesto, request.user),
+        'gasto_form': GastoForm(presupuesto=presupuesto),
+        'orden_form': OrdenCambioForm(),
+        'gastos': presupuesto.gastos.select_related('partida').all(),
+        'ordenes': presupuesto.ordenes_cambio.select_related('aprobado_por').all(),
+        'umbral_partida': UMBRAL_DESVIACION_PARTIDA,
     })
 
 
@@ -346,3 +371,108 @@ def catalogo_buscar(request):
         for c in qs.order_by('categoria', 'codigo')[:20]
     ]
     return JsonResponse({'resultados': resultados})
+
+
+# ---------------------------------------------------------------------------
+# Control de obra (Fase 4): gastos reales y órdenes de cambio.
+# ---------------------------------------------------------------------------
+
+@login_required
+def gasto_guardar(request, pk, gasto_pk=None):
+    """Alta y edición de un gasto real (§4.3)."""
+    presupuesto = get_object_or_404(Presupuesto, pk=pk)
+    if request.method != 'POST':
+        return redirect('presupuesto_detalle', pk=presupuesto.pk)
+
+    instancia = None
+    if gasto_pk:
+        instancia = get_object_or_404(RegistroGasto, pk=gasto_pk, presupuesto=presupuesto)
+
+    form = GastoForm(request.POST, instance=instancia, presupuesto=presupuesto)
+    if form.is_valid():
+        gasto = form.save(commit=False)
+        gasto.presupuesto = presupuesto
+        if not gasto.registrado_por_id:
+            gasto.registrado_por = request.user
+        gasto.save()
+        messages.success(request, 'Gasto actualizado.' if gasto_pk else 'Gasto registrado.')
+    else:
+        messages.error(request, f'No se pudo guardar el gasto — {_errores(form)}')
+    return redirect('presupuesto_detalle', pk=presupuesto.pk)
+
+
+@login_required
+def gasto_eliminar(request, pk, gasto_pk):
+    presupuesto = get_object_or_404(Presupuesto, pk=pk)
+    if request.method != 'POST':
+        return redirect('presupuesto_detalle', pk=presupuesto.pk)
+    get_object_or_404(RegistroGasto, pk=gasto_pk, presupuesto=presupuesto).delete()
+    messages.success(request, 'Gasto eliminado.')
+    return redirect('presupuesto_detalle', pk=presupuesto.pk)
+
+
+@login_required
+def orden_guardar(request, pk, orden_pk=None):
+    """Alta y edición de una orden de cambio (§4.2)."""
+    presupuesto = get_object_or_404(Presupuesto, pk=pk)
+    if request.method != 'POST':
+        return redirect('presupuesto_detalle', pk=presupuesto.pk)
+
+    instancia = None
+    if orden_pk:
+        instancia = get_object_or_404(OrdenCambio, pk=orden_pk, presupuesto=presupuesto)
+
+    form = OrdenCambioForm(request.POST, instance=instancia)
+    if form.is_valid():
+        orden = form.save(commit=False)
+        orden.presupuesto = presupuesto
+        orden.save()
+        messages.success(request, 'Orden actualizada.' if orden_pk else 'Orden de cambio registrada.')
+    else:
+        messages.error(request, f'No se pudo guardar la orden — {_errores(form)}')
+    return redirect('presupuesto_detalle', pk=presupuesto.pk)
+
+
+@login_required
+def orden_resolver(request, pk, orden_pk, decision):
+    """Aprueba o rechaza en un clic, dejando quién y cuándo (§4.2).
+
+    Aprobar es lo que mueve los techos, así que se hace explícito y por POST: no
+    debe poder dispararse con un enlace.
+    """
+    presupuesto = get_object_or_404(Presupuesto, pk=pk)
+    if request.method != 'POST' or decision not in ('aprobada', 'rechazada'):
+        return redirect('presupuesto_detalle', pk=presupuesto.pk)
+
+    orden = get_object_or_404(OrdenCambio, pk=orden_pk, presupuesto=presupuesto)
+    orden.estado = decision
+    orden.aprobado_por = request.user
+    orden.fecha_resolucion = date.today()
+    orden.save()
+
+    if decision == 'aprobada' and orden.fuente == FUENTE_CAPITAL_ADICIONAL:
+        messages.success(
+            request,
+            f'Orden aprobada con capital adicional: el presupuesto aprobado sube '
+            f'${orden.importe:,.2f}.',
+        )
+    elif decision == 'aprobada':
+        messages.warning(
+            request,
+            f'Orden aprobada con cargo a la contingencia: quedan '
+            f'${presupuesto.contingencia_disponible:,.2f} de reserva '
+            f'({presupuesto.contingencia_consumida_pct:.0f}% consumida).',
+        )
+    else:
+        messages.info(request, 'Orden rechazada. No afecta los techos.')
+    return redirect('presupuesto_detalle', pk=presupuesto.pk)
+
+
+@login_required
+def orden_eliminar(request, pk, orden_pk):
+    presupuesto = get_object_or_404(Presupuesto, pk=pk)
+    if request.method != 'POST':
+        return redirect('presupuesto_detalle', pk=presupuesto.pk)
+    get_object_or_404(OrdenCambio, pk=orden_pk, presupuesto=presupuesto).delete()
+    messages.success(request, 'Orden eliminada.')
+    return redirect('presupuesto_detalle', pk=presupuesto.pk)

@@ -80,6 +80,22 @@ ESTADO_ORDEN_CAMBIO_CHOICES = [
     ('rechazada', 'Rechazada'),
 ]
 
+# El §4.2 exige que la orden diga "de dónde sale el dinero", y la respuesta cambia
+# el resultado: con cargo a la reserva NO sube el presupuesto (consume
+# contingencia, que es justo para lo que está); con capital adicional SÍ sube el
+# techo aprobado, porque es alcance nuevo que alguien autorizó a pagar.
+FUENTE_CONTINGENCIA = 'contingencia'
+FUENTE_CAPITAL_ADICIONAL = 'capital_adicional'
+
+FUENTE_ORDEN_CAMBIO_CHOICES = [
+    (FUENTE_CONTINGENCIA, 'Con cargo a la contingencia (imprevisto)'),
+    (FUENTE_CAPITAL_ADICIONAL, 'Capital adicional (amplía el presupuesto aprobado)'),
+]
+
+# §4.4: una partida que se desvía más de este % dispara alerta, aunque el
+# presupuesto global siga en verde — el problema se ve antes por partida.
+UMBRAL_DESVIACION_PARTIDA = 15
+
 # --- Porcentajes por defecto de las capas (§2.4, confirmados por el usuario) ---
 DEFAULT_PCT_INDIRECTOS = 12
 DEFAULT_PCT_UTILIDAD = 12
