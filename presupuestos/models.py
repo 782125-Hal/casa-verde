@@ -225,11 +225,34 @@ class Presupuesto(models.Model):
         return self.subtotal + self.monto_iva
 
     @property
+    def costo_para_roi(self) -> Decimal:
+        """Lo que REALMENTE desembolsa el inversionista: directo + indirectos +
+        contingencia. Sin utilidad ni IVA.
+
+        Las obras se administran directamente, así que la **utilidad es margen,
+        no desembolso**: meterla en el ROI inflaría la inversión con dinero que
+        nadie paga y castigaría la rentabilidad de forma artificial. El IVA queda
+        fuera por la misma razón —solo aplica si se factura, y es acreditable—.
+
+        Es deliberadamente INDEPENDIENTE de ``pct_utilidad``: si algún día se
+        sube el margen comercial, el ROI no se mueve.
+        """
+        return self.base_con_contingencia
+
+    @property
     def costo_m2(self) -> Decimal | None:
-        """Costo total por m², para contrastar con el estimado paramétrico (§4.6)."""
+        """Costo total por m² (número comercial, con utilidad e IVA)."""
         if not self.area_m2:
             return None
         return (self.total / self.area_m2).quantize(Decimal('0.01'))
+
+    @property
+    def costo_roi_m2(self) -> Decimal | None:
+        """Costo por m² de lo que alimenta el ROI. Es el comparable contra el
+        estimado paramétrico, que también es desembolso sin margen."""
+        if not self.area_m2:
+            return None
+        return (self.costo_para_roi / self.area_m2).quantize(Decimal('0.01'))
 
     # --- Control de obra (§4.3 y §4.4) -----------------------------------------
 

@@ -280,13 +280,28 @@
                             <td class="text-end" id="capaIva">${{ presupuesto.monto_iva|floatformat:2 }}</td>
                         </tr>
                         <tr class="table-light">
-                            <td class="fw-bold">TOTAL</td>
+                            <td class="fw-bold">TOTAL <span class="text-muted fw-normal small">(comercial)</span></td>
                             <td class="text-end fw-bold fs-5" id="capaTotal">${{ presupuesto.total|floatformat:2 }}</td>
                         </tr>
+                        <tr class="border-top border-2">
+                            <td class="fw-semibold text-success">
+                                Costo que alimenta el ROI
+                                <div class="text-muted fw-normal small">directo + indirectos + contingencia</div>
+                            </td>
+                            <td class="text-end fw-bold text-success" id="capaCostoRoi">
+                                ${{ presupuesto.costo_para_roi|floatformat:2 }}
+                            </td>
+                        </tr>
                         <tr>
-                            <td class="text-muted small">Costo por m²</td>
+                            <td class="text-muted small">Costo por m² (comercial)</td>
                             <td class="text-end text-muted small" id="capaCostoM2">
                                 {% if presupuesto.costo_m2 %}${{ presupuesto.costo_m2|floatformat:2 }}{% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted small">Costo por m² (para ROI)</td>
+                            <td class="text-end text-muted small" id="capaCostoRoiM2">
+                                {% if presupuesto.costo_roi_m2 %}${{ presupuesto.costo_roi_m2|floatformat:2 }}{% else %}—{% endif %}
                             </td>
                         </tr>
                         <tr>
@@ -434,6 +449,11 @@ function recalcular(marcarSinGuardar) {
     document.getElementById('capaUtilidad').textContent = pesos(utilidad);
     document.getElementById('capaIva').textContent = pesos(iva);
     document.getElementById('capaTotal').textContent = pesos(total);
+    // Lo que alimenta el ROI: directo + indirectos + contingencia. NO incluye
+    // utilidad ni IVA — la obra se administra directamente, así que el margen no
+    // es un desembolso. Es independiente de pct_utilidad a propósito.
+    const costoRoi = directo + indirectos + contingencia;
+    document.getElementById('capaCostoRoi').textContent = pesos(costoRoi);
     document.getElementById('filaIva').classList.toggle('d-none', !aplicaIva);
 
     document.getElementById('lblIndirectos').textContent = `(${pIndirectos}%)`;
@@ -443,6 +463,8 @@ function recalcular(marcarSinGuardar) {
 
     const area = num(document.getElementById('{{ form.area_m2.id_for_label }}').value);
     document.getElementById('capaCostoM2').textContent = area > 0 ? pesos(centavos(total / area)) : '—';
+    document.getElementById('capaCostoRoiM2').textContent =
+        area > 0 ? pesos(centavos(costoRoi / area)) : '—';
     document.getElementById('capaRatio').textContent =
         total > 0 ? (directo / total * 100).toFixed(1) + '%' : '—';
 

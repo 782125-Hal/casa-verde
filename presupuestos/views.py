@@ -109,8 +109,10 @@ def _impacto_en_roi(presupuesto, usuario):
 
     from services.oportunidad import OportunidadService
 
+    # costo_para_roi, no total: la utilidad es margen, no desembolso (§3.1).
     simulado = OportunidadService.simular_con_remodelacion(
-        propiedad, presupuesto.total, usuario=propiedad.capturado_por or usuario,
+        propiedad, presupuesto.costo_para_roi,
+        usuario=propiedad.capturado_por or usuario,
     )
     actual = getattr(propiedad, 'analisis', None)
     return {

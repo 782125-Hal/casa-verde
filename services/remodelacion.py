@@ -80,8 +80,12 @@ class RemodelacionService:
         que tiene ``choices`` de nivel (ninguna/ligera/media/completa), y meterle
         'remodelacion' dejaría un valor fuera de catálogo que el admin mostraría
         en crudo.
+
+        Se toma ``costo_para_roi`` y NO ``total``: las obras se administran
+        directamente, así que la utilidad es margen y no desembolso. Sumarla a la
+        inversión castigaría el ROI con dinero que nadie paga.
         """
-        total = presupuesto.total
+        total = presupuesto.costo_para_roi
         area = presupuesto.area_m2 or Decimal('0')
         return {
             'nivel_obra': propiedad.nivel_remodelacion_efectivo,
