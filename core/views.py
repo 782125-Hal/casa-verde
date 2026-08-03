@@ -151,11 +151,22 @@ def propiedad_detalle(request, pk):
         tipo_inmueble=propiedad.tipo_inmueble,
     ).exclude(pk=pk).select_related('analisis')[:5]
 
+    # Presupuestos de obra (Fase 3): el activo es el que alimenta el costo de
+    # remodelación del análisis, así que la ficha debe decir de dónde salió.
+    presupuestos_propiedad = list(
+        propiedad.presupuestos.prefetch_related('partidas').order_by('-creado_en')
+    )
+    presupuesto_activo = next(
+        (p for p in presupuestos_propiedad if p.es_activo), None,
+    )
+
     return render(request, 'propiedades/detalle.html', {
         'propiedad': propiedad,
         'analisis': getattr(propiedad, 'analisis', None),
         'historial': historial,
         'similares': similares,
+        'presupuestos_propiedad': presupuestos_propiedad,
+        'presupuesto_activo': presupuesto_activo,
     })
 
 

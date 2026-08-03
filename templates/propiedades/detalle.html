@@ -104,6 +104,44 @@
                 </div>
                 {% endif %}
 
+                {# --- Presupuestos de obra (Fase 3): de dónde sale ese costo --- #}
+                <div class="border rounded p-2 mb-2 small">
+                    {% if presupuesto_activo %}
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-calculator text-success"></i>
+                            Costo tomado del presupuesto
+                            <a href="{% url 'presupuesto_detalle' presupuesto_activo.pk %}">{{ presupuesto_activo.nombre }}</a>
+                        </span>
+                        <span class="badge bg-success">activo</span>
+                    </div>
+                    <div class="text-muted mt-1">
+                        Detallado por partidas (±5–10%), no estimado por m².
+                    </div>
+                    {% else %}
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted">
+                            <i class="bi bi-calculator"></i> Sin presupuesto activo: el costo es paramétrico (±25–40%).
+                        </span>
+                    </div>
+                    <form method="post" action="{% url 'estimado_rapido' propiedad.pk %}" class="mt-2 d-inline">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline-success">
+                            <i class="bi bi-lightning-charge"></i> Estimado rápido en 1 clic
+                        </button>
+                    </form>
+                    <a href="{% url 'presupuesto_crear' %}" class="btn btn-sm btn-outline-secondary mt-2">
+                        Presupuesto detallado
+                    </a>
+                    {% endif %}
+                    {% if presupuestos_propiedad|length > 1 %}
+                    <div class="text-muted mt-2">
+                        Esta propiedad tiene {{ presupuestos_propiedad|length }} presupuestos
+                        (<a href="{% url 'presupuestos_lista' %}?propiedad={{ propiedad.pk }}">ver todos</a>).
+                    </div>
+                    {% endif %}
+                </div>
+
                 {% if analisis.es_prioritaria %}
                 <div class="alert alert-success small mb-2">
                     <i class="bi bi-star-fill"></i> <strong>Oportunidad prioritaria</strong>

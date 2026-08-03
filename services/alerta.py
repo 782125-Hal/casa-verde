@@ -88,6 +88,90 @@ class AlertaService:
         return alertas
 
     @classmethod
+    def _propiedad_de(cls, presupuesto):
+        """Propiedad del presupuesto, o None si la FK ya no resuelve.
+
+        Durante un borrado en cascada (se borra la propiedad → se borran sus
+        presupuestos → señales) la fila padre ya no existe y el acceso normal
+        lanzaría ``DoesNotExist``, tumbando el borrado entero.
+        """
+        from django.core.exceptions import ObjectDoesNotExist
+
+        try:
+            return presupuesto.propiedad
+        except ObjectDoesNotExist:
+            return None
+
+    @classmethod
+    def notificar_presupuesto(cls, presupuesto):
+        """Avisa cuando un presupuesto en ejecución se sale de control (§4.4).
+
+        Dispara si el semáforo está en amarillo/rojo o si la contingencia
+        consumida llegó al umbral del §4.1. La deduplicación de ``crear_alerta``
+        —una sin leer por usuario/propiedad/tipo— evita que cada gasto capturado
+        genere un aviso nuevo; el objetivo es enterarse, no ser sepultado.
+
+        Sin propiedad ligada no se notifica: las alertas cuelgan de una propiedad
+        y un presupuesto suelto no tiene a quién avisarle. La FK se lee con
+        guarda porque esto también corre en cascadas de borrado, donde la
+        propiedad puede haber desaparecido ya.
+        """
+        propiedad = cls._propiedad_de(presupuesto)
+        if propiedad is None or not presupuesto.requiere_alerta:
+            return []
+
+        semaforo = presupuesto.semaforo
+        tipo = 'presupuesto_rebasado' if semaforo == 'rojo' else 'presupuesto_contingencia'
+        encabezado = (
+            'PRESUPUESTO REBASADO' if semaforo == 'rojo'
+            else 'Presupuesto consumiendo contingencia'
+        )
+        mensaje = (
+            f'{encabezado}: {presupuesto.nombre}\n'
+            f'{propiedad.titulo}\n'
+            f'Gasto real ${presupuesto.gasto_real:,.0f} de ${presupuesto.base_con_contingencia:,.0f} '
+            f'(base ${presupuesto.presupuesto_base:,.0f})\n'
+            f'Contingencia consumida: {presupuesto.contingencia_consumida_pct:.0f}%'
+        )
+        desviadas = presupuesto.partidas_desviadas
+        if desviadas:
+            mensaje += f'\nPartidas desviadas: {len(desviadas)} (la mayor: {desviadas[0].descripcion[:50]})'
+
+        alertas = []
+        for usuario in cls._usuarios_inversionistas():
+            alerta = cls.crear_alerta(usuario, propiedad, tipo, mensaje)
+            if alerta:
+                alertas.append(alerta)
+                cls._enviar(alerta, usuario)
+        return alertas
+
+    @classmethod
+    def notificar_partida_desviada(cls, partida):
+        """Aviso por PARTIDA (§4.4): el problema se ve antes aquí que en el total.
+
+        Un presupuesto global en verde puede esconder una partida disparada; por
+        eso este aviso es independiente del semáforo del presupuesto.
+        """
+        presupuesto = partida.presupuesto
+        propiedad = cls._propiedad_de(presupuesto)
+        if propiedad is None or not partida.excede_umbral:
+            return []
+
+        mensaje = (
+            f'Partida desviada en {presupuesto.nombre}\n'
+            f'{partida.descripcion}\n'
+            f'Presupuestado ${partida.importe:,.0f} · real ${partida.gasto_real:,.0f} '
+            f'(+{partida.desviacion_pct:.0f}%)'
+        )
+        alertas = []
+        for usuario in cls._usuarios_inversionistas():
+            alerta = cls.crear_alerta(usuario, propiedad, 'partida_desviada', mensaje)
+            if alerta:
+                alertas.append(alerta)
+                cls._enviar(alerta, usuario)
+        return alertas
+
+    @classmethod
     def notificar_baja_precio(cls, propiedad, precio_anterior):
         usuarios = cls._usuarios_para_zona(propiedad.zona)
         if not usuarios.exists():

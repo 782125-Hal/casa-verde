@@ -12,6 +12,18 @@ core.choices.ESTADO_FISICO_A_NIVEL_REMODELACION.
 El costo por m² se busca primero en la zona (mercado.CostoRemodelacionM2). Si la
 zona aún no tiene ese nivel capturado, se usa el fallback global
 core.choices.DEFAULT_COSTO_REMODELACION_M2 y se marca el resultado como estimado.
+
+PRESUPUESTO ACTIVO (Fase 3 del módulo de presupuestos)
+------------------------------------------------------
+Si la propiedad tiene un ``Presupuesto`` marcado ``es_activo``, su total MANDA
+sobre la estimación paramétrica: un presupuesto por partidas tiene precisión de
+±5–10% frente al ±25–40% del costo por m².
+
+Este es el ÚNICO punto de integración con el ROI, a propósito: ``estimar()`` es
+lo que alimenta la partida de reparaciones en ``OportunidadService``, así que
+todo lo de aguas abajo —inversión total, ROI, semáforo, alertas— sigue siendo el
+mismo código de siempre. Duplicar la fórmula del ROI aquí habría creado dos
+verdades que se desincronizan.
 """
 from decimal import Decimal
 
@@ -38,11 +50,67 @@ class RemodelacionService:
         return Decimal('0')
 
     @classmethod
+    def presupuesto_activo(cls, propiedad):
+        """Presupuesto marcado ``es_activo`` de la propiedad, o None.
+
+        Import local: ``presupuestos`` depende de ``propiedades``, y hacerlo
+        arriba cerraría el ciclo al cargar las apps.
+        """
+        if not propiedad.pk:
+            return None
+        from presupuestos.models import Presupuesto
+
+        return (
+            Presupuesto.objects
+            .filter(propiedad=propiedad, es_activo=True)
+            .prefetch_related('partidas')
+            .first()
+        )
+
+    @classmethod
+    def desde_presupuesto(cls, presupuesto, propiedad):
+        """Convierte un presupuesto en el mismo dict que devuelve ``estimar()``.
+
+        El ``costo_m2`` se deriva del área DEL PRESUPUESTO, no de la propiedad:
+        el usuario pudo presupuestar solo una parte de la construcción, y esa es
+        la superficie a la que corresponde el total.
+
+        ``nivel_obra`` sigue siendo el de la propiedad, NO el ``tipo_obra`` del
+        presupuesto: alimenta ``AnalisisInversion.nivel_remodelacion_aplicado``,
+        que tiene ``choices`` de nivel (ninguna/ligera/media/completa), y meterle
+        'remodelacion' dejaría un valor fuera de catálogo que el admin mostraría
+        en crudo.
+
+        Se toma ``costo_para_roi`` y NO ``total``: las obras se administran
+        directamente, así que la utilidad es margen y no desembolso. Sumarla a la
+        inversión castigaría el ROI con dinero que nadie paga.
+        """
+        total = presupuesto.costo_para_roi
+        area = presupuesto.area_m2 or Decimal('0')
+        return {
+            'nivel_obra': propiedad.nivel_remodelacion_efectivo,
+            'tipo_obra': presupuesto.tipo_obra,
+            'costo_m2': (total / area).quantize(Decimal('0.01')) if area > 0 else Decimal('0'),
+            'm2_base': Decimal(str(area)).quantize(Decimal('0.01')),
+            'presupuesto': total,
+            'es_estimado': False,   # viene de partidas, no de un costo genérico
+            'origen': 'presupuesto',
+            'presupuesto_id': presupuesto.pk,
+            'presupuesto_nombre': presupuesto.nombre,
+        }
+
+    @classmethod
     def estimar(cls, propiedad):
         """
         Devuelve un dict con el desglose del presupuesto de remodelación:
-          nivel_obra, costo_m2, m2_base, presupuesto, es_estimado
+          nivel_obra, costo_m2, m2_base, presupuesto, es_estimado, origen
+
+        Si hay presupuesto activo, MANDA sobre el estimado paramétrico.
         """
+        activo = cls.presupuesto_activo(propiedad)
+        if activo is not None:
+            return cls.desde_presupuesto(activo, propiedad)
+
         nivel = propiedad.nivel_remodelacion_efectivo
         m2 = cls.superficie_base(propiedad)
 
@@ -54,6 +122,7 @@ class RemodelacionService:
                 'm2_base': m2.quantize(Decimal('0.01')),
                 'presupuesto': Decimal('0'),
                 'es_estimado': False,
+                'origen': 'parametrico',
             }
 
         costo_zona = CostoRemodelacionM2.obtener_costo_m2(propiedad.zona, nivel)
@@ -72,4 +141,5 @@ class RemodelacionService:
             'm2_base': m2.quantize(Decimal('0.01')),
             'presupuesto': presupuesto,
             'es_estimado': es_estimado,
+            'origen': 'parametrico',
         }

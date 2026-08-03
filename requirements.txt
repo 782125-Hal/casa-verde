@@ -27,8 +27,8 @@ playwright>=1.40
 # twilio>=8.0
 
 # Fase 6: Reportes
-openpyxl>=3.1
-# reportlab>=4.0
+openpyxl>=3.1                # Excel del presupuesto y del cierre de obra
+reportlab>=4.0               # PDF; Python puro, sin libs del sistema (cPanel)
 
 # Producción
 whitenoise>=6.6              # Sirve archivos estáticos sin servidor extra

@@ -1,0 +1,213 @@
+"""Formularios del módulo de presupuestos."""
+from django import forms
+
+from presupuestos.choices import DEFAULT_PCT_CONTINGENCIA
+from presupuestos.models import (
+    OrdenCambio,
+    PartidaPresupuesto,
+    Presupuesto,
+    RegistroGasto,
+)
+from presupuestos.plantillas import PLANTILLA_CHOICES
+from propiedades.models import Propiedad
+
+_SELECT = {'class': 'form-select'}
+_INPUT = {'class': 'form-control'}
+
+
+class PresupuestoForm(forms.ModelForm):
+    """Encabezado: identificación + los % de las capas."""
+
+    class Meta:
+        model = Presupuesto
+        fields = [
+            'nombre', 'propiedad', 'tipo_obra', 'estado', 'area_m2',
+            'pct_indirectos', 'pct_contingencia', 'pct_utilidad',
+            'aplica_iva', 'pct_iva', 'es_activo', 'notas',
+        ]
+        widgets = {
+            'nombre': forms.TextInput(attrs={**_INPUT, 'placeholder': 'Ej. Remodelación integral — escenario base'}),
+            'propiedad': forms.Select(attrs=_SELECT),
+            'tipo_obra': forms.Select(attrs=_SELECT),
+            'estado': forms.Select(attrs=_SELECT),
+            'area_m2': forms.NumberInput(attrs={**_INPUT, 'step': '0.01', 'min': '0'}),
+            'pct_indirectos': forms.NumberInput(attrs={**_INPUT, 'step': '0.01', 'min': '0'}),
+            'pct_contingencia': forms.NumberInput(attrs={**_INPUT, 'step': '0.01', 'min': '0'}),
+            'pct_utilidad': forms.NumberInput(attrs={**_INPUT, 'step': '0.01', 'min': '0'}),
+            'pct_iva': forms.NumberInput(attrs={**_INPUT, 'step': '0.01', 'min': '0'}),
+            'aplica_iva': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'es_activo': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notas': forms.Textarea(attrs={**_INPUT, 'rows': 2}),
+        }
+        help_texts = {
+            'pct_contingencia': 'Reserva para imprevistos REALES, no para mejoras.',
+            'es_activo': 'El que alimentará el ROI de la propiedad (Fase 3).',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['propiedad'].queryset = (
+            Propiedad.objects.select_related('zona').order_by('titulo')
+        )
+        self.fields['propiedad'].required = False
+        self.fields['propiedad'].empty_label = 'Sin propiedad ligada'
+        # m² de construcción por propiedad: el template los emite como JSON para
+        # precargar el área al elegirla, sin una segunda petición.
+        self.m2_por_propiedad = {
+            str(p.pk): str(p.m2_construccion or '')
+            for p in self.fields['propiedad'].queryset
+        }
+
+    def clean(self):
+        """Dos reglas del encabezado.
+
+        1. **Área precargada desde la propiedad** si el usuario la dejó vacía. Se
+           hace en el servidor y no solo en JS porque el área alimenta el
+           ``costo_m2``: si llegara vacía, ese indicador quedaría mudo. Queda
+           EDITABLE — solo se rellena cuando no se capturó nada.
+        2. **Un solo presupuesto activo por propiedad.** El modelo ya lo impide
+           con una UniqueConstraint, pero eso sale como IntegrityError; aquí se
+           traduce a un error de formulario legible.
+        """
+        datos = super().clean()
+        propiedad = datos.get('propiedad')
+
+        if propiedad and not datos.get('area_m2') and propiedad.m2_construccion:
+            datos['area_m2'] = propiedad.m2_construccion
+            self.cleaned_data['area_m2'] = propiedad.m2_construccion
+
+        if datos.get('es_activo') and propiedad:
+            otros = Presupuesto.objects.filter(propiedad=propiedad, es_activo=True)
+            if self.instance.pk:
+                otros = otros.exclude(pk=self.instance.pk)
+            if otros.exists():
+                self.add_error('es_activo', forms.ValidationError(
+                    'Esa propiedad ya tiene un presupuesto activo (%(nombre)s). '
+                    'Desactívalo primero.',
+                    params={'nombre': otros.first().nombre},
+                ))
+        return datos
+
+
+class PresupuestoCrearForm(PresupuestoForm):
+    """Alta: los mismos campos + la plantilla que precarga partidas (§3.3)."""
+
+    plantilla = forms.ChoiceField(
+        choices=PLANTILLA_CHOICES, required=False, label='Plantilla de partidas',
+        widget=forms.Select(attrs=_SELECT),
+        help_text='Precarga las partidas típicas con cantidad 0, para que solo ajustes cantidades.',
+    )
+
+    class Meta(PresupuestoForm.Meta):
+        fields = [
+            'nombre', 'propiedad', 'tipo_obra', 'area_m2',
+            'pct_indirectos', 'pct_contingencia', 'pct_utilidad',
+            'aplica_iva', 'pct_iva', 'notas',
+        ]
+
+    def clean(self):
+        """Avisa si la plantilla no corresponde al tipo de obra elegido.
+
+        No lo bloquea: puede haber casos mixtos (una obra nueva con partidas de
+        remodelación de una construcción existente en el mismo predio).
+        """
+        datos = super().clean()
+        from presupuestos.plantillas import PLANTILLAS
+
+        clave = datos.get('plantilla')
+        tipo = datos.get('tipo_obra')
+        plantilla = PLANTILLAS.get(clave)
+        if plantilla and tipo and plantilla['tipo_obra'] != tipo:
+            self.add_error('plantilla', forms.ValidationError(
+                'La plantilla «%(plantilla)s» es de %(suyo)s y elegiste %(tuyo)s. '
+                'Cambia una de las dos.',
+                params={
+                    'plantilla': plantilla['nombre'],
+                    'suyo': dict(self.fields['tipo_obra'].choices).get(plantilla['tipo_obra']),
+                    'tuyo': dict(self.fields['tipo_obra'].choices).get(tipo),
+                },
+            ))
+        return datos
+
+
+class PartidaForm(forms.ModelForm):
+    """Un renglón. El autocompletado del catálogo se resuelve en el template:
+    al elegir un concepto se copian descripción, unidad y PU, y quedan editables
+    (el precio del renglón se congela al armarlo, no se lee por la FK)."""
+
+    class Meta:
+        model = PartidaPresupuesto
+        fields = ['concepto', 'categoria', 'descripcion', 'unidad', 'cantidad', 'pu', 'orden', 'notas']
+        widgets = {
+            'concepto': forms.HiddenInput(),
+            'categoria': forms.Select(attrs=_SELECT),
+            'descripcion': forms.TextInput(attrs={**_INPUT, 'placeholder': 'Descripción del concepto'}),
+            'unidad': forms.Select(attrs=_SELECT),
+            'cantidad': forms.NumberInput(attrs={**_INPUT, 'step': '0.01', 'min': '0'}),
+            'pu': forms.NumberInput(attrs={**_INPUT, 'step': '0.01', 'min': '0'}),
+            'orden': forms.NumberInput(attrs={**_INPUT, 'min': '0'}),
+            'notas': forms.Textarea(attrs={**_INPUT, 'rows': 2}),
+        }
+
+
+class GastoForm(forms.ModelForm):
+    """Captura de gasto real (§4.3). La partida es opcional: hay gastos que no
+    caen en ninguna (un permiso, un flete) y aun así cuentan para el total."""
+
+    class Meta:
+        model = RegistroGasto
+        fields = ['fecha', 'descripcion', 'partida', 'proveedor', 'importe_real', 'factura', 'notas']
+        widgets = {
+            'fecha': forms.DateInput(attrs={**_INPUT, 'type': 'date'}),
+            'descripcion': forms.TextInput(attrs={**_INPUT, 'placeholder': 'En qué se gastó'}),
+            'partida': forms.Select(attrs=_SELECT),
+            'proveedor': forms.TextInput(attrs=_INPUT),
+            'importe_real': forms.NumberInput(attrs={**_INPUT, 'step': '0.01', 'min': '0'}),
+            'factura': forms.TextInput(attrs={**_INPUT, 'placeholder': 'Folio o UUID'}),
+            'notas': forms.Textarea(attrs={**_INPUT, 'rows': 2}),
+        }
+
+    def __init__(self, *args, presupuesto=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Solo las partidas de ESTE presupuesto: ofrecer las de otro permitiría
+        # imputar un gasto a una obra distinta.
+        alcance = presupuesto or getattr(self.instance, 'presupuesto', None)
+        self.fields['partida'].queryset = (
+            PartidaPresupuesto.objects.filter(presupuesto=alcance)
+            if alcance else PartidaPresupuesto.objects.none()
+        )
+        self.fields['partida'].required = False
+        self.fields['partida'].empty_label = 'Sin imputar a una partida'
+
+
+class OrdenCambioForm(forms.ModelForm):
+    """Orden de cambio (§4.2). El `motivo` y la `fuente` son el corazón del
+    control: obligan a decir qué se agrega y de dónde sale el dinero."""
+
+    class Meta:
+        model = OrdenCambio
+        fields = ['fecha', 'descripcion', 'motivo', 'importe', 'fuente', 'estado',
+                  'aprobado_por', 'fecha_resolucion']
+        widgets = {
+            'fecha': forms.DateInput(attrs={**_INPUT, 'type': 'date'}),
+            'descripcion': forms.TextInput(attrs={**_INPUT, 'placeholder': 'Qué se agrega o cambia'}),
+            'motivo': forms.Textarea(attrs={**_INPUT, 'rows': 2,
+                                            'placeholder': 'Imprevisto real o mejora: la contingencia solo cubre lo primero'}),
+            'importe': forms.NumberInput(attrs={**_INPUT, 'step': '0.01'}),
+            'fuente': forms.Select(attrs=_SELECT),
+            'estado': forms.Select(attrs=_SELECT),
+            'aprobado_por': forms.Select(attrs=_SELECT),
+            'fecha_resolucion': forms.DateInput(attrs={**_INPUT, 'type': 'date'}),
+        }
+
+    def clean(self):
+        """Una orden resuelta necesita quién y cuándo: sin eso no hay trazabilidad,
+        que es justamente lo que el §4.2 pide documentar."""
+        datos = super().clean()
+        if datos.get('estado') in ('aprobada', 'rechazada'):
+            if not datos.get('fecha_resolucion'):
+                datos['fecha_resolucion'] = datos.get('fecha')
+                self.cleaned_data['fecha_resolucion'] = datos['fecha_resolucion']
+            if not datos.get('aprobado_por'):
+                self.add_error('aprobado_por', 'Indica quién resolvió la orden.')
+        return datos

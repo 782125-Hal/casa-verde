@@ -1,0 +1,895 @@
+{% extends 'base/base.html' %}
+{% block title %}{{ presupuesto.nombre }} — {{ CASA_VERDE.NOMBRE }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 mb-1"><i class="bi bi-calculator"></i> {{ presupuesto.nombre }}</h1>
+        <div class="text-muted">
+            {{ presupuesto.get_tipo_obra_display }} ·
+            <span class="badge bg-secondary">{{ presupuesto.get_estado_display }}</span>
+            {% if presupuesto.propiedad %}
+            · <a href="{% url 'propiedad_detalle' presupuesto.propiedad.pk %}" class="text-decoration-none">
+                {{ presupuesto.propiedad.titulo|truncatechars:50 }}
+            </a>
+            {% else %}
+            · <span class="fst-italic">sin propiedad ligada</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="text-end">
+        <a href="{% url 'presupuestos_lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-download"></i> Exportar
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="{% url 'presupuesto_pdf' presupuesto.pk %}">
+                    <i class="bi bi-file-earmark-pdf"></i> Presupuesto (PDF)</a></li>
+                <li><a class="dropdown-item" href="{% url 'presupuesto_excel' presupuesto.pk %}">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Presupuesto (Excel)</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{% url 'presupuesto_cierre' presupuesto.pk %}">
+                    <i class="bi bi-clipboard-data"></i> Cierre de obra (Excel)
+                    <div class="small text-muted">Presupuestado vs. real, órdenes y KPIs</div></a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- ================= Columna izquierda: encabezado + partidas ============ -->
+    <div class="col-xl-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold">Encabezado y capas</div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+                    {% endif %}
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ form.nombre.id_for_label }}">Nombre</label>
+                            {{ form.nombre }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ form.propiedad.id_for_label }}">Propiedad</label>
+                            {{ form.propiedad }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ form.tipo_obra.id_for_label }}">Tipo de obra</label>
+                            {{ form.tipo_obra }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ form.estado.id_for_label }}">Estado</label>
+                            {{ form.estado }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ form.area_m2.id_for_label }}">Área (m²)</label>
+                            {{ form.area_m2 }}
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label" for="{{ form.pct_indirectos.id_for_label }}">Indirectos %</label>
+                            {{ form.pct_indirectos }}
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="{{ form.pct_contingencia.id_for_label }}">Contingencia %</label>
+                            {{ form.pct_contingencia }}
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="{{ form.pct_utilidad.id_for_label }}">Utilidad %</label>
+                            {{ form.pct_utilidad }}
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="{{ form.pct_iva.id_for_label }}">IVA %</label>
+                            {{ form.pct_iva }}
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                {{ form.aplica_iva }}
+                                <label class="form-check-label" for="{{ form.aplica_iva.id_for_label }}">Aplicar IVA</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                {{ form.es_activo }}
+                                <label class="form-check-label" for="{{ form.es_activo.id_for_label }}">
+                                    Presupuesto activo (alimentará el ROI)
+                                </label>
+                            </div>
+                            {% if form.es_activo.errors %}
+                            <div class="text-danger small">{{ form.es_activo.errors|striptags }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="{{ form.notas.id_for_label }}">Notas</label>
+                            {{ form.notas }}
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-verde btn-sm">Guardar encabezado</button>
+                        <span class="small text-muted ms-2">
+                            Los % cambian el desglose en vivo; guarda para persistirlos.
+                        </span>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ---------------------------- Partidas ---------------------------- -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">Partidas</span>
+                <button class="btn btn-sm btn-verde" data-bs-toggle="modal" data-bs-target="#modalPartida"
+                        onclick="prepararAlta()">+ Agregar partida</button>
+            </div>
+            <div class="card-body p-0">
+                {% if grupos %}
+                <table class="table table-sm align-middle mb-0" id="tablaPartidas">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:34%">Concepto</th>
+                            <th>Unidad</th>
+                            <th class="text-end">Cantidad</th>
+                            <th class="text-end">PU</th>
+                            <th class="text-end">Importe</th>
+                            <th style="width:90px"></th>
+                        </tr>
+                    </thead>
+                    {% for grupo in grupos %}
+                    <tbody>
+                        <tr class="table-light">
+                            <td colspan="4" class="fw-semibold text-uppercase small">{{ grupo.etiqueta }}</td>
+                            <td class="text-end fw-semibold small" data-subtotal-categoria="{{ grupo.categoria }}">
+                                ${{ grupo.subtotal|floatformat:2 }}
+                            </td>
+                            <td></td>
+                        </tr>
+                        {% for partida in grupo.partidas %}
+                        <tr data-partida="{{ partida.pk }}">
+                            <td>
+                                {{ partida.descripcion }}
+                                {% if partida.concepto %}
+                                <span class="badge bg-light text-muted border ms-1">{{ partida.concepto.codigo }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ partida.get_unidad_display }}</td>
+                            <td class="text-end">
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm text-end js-cantidad"
+                                       value="{{ partida.cantidad|stringformat:'.2f' }}" style="max-width:110px; margin-left:auto;">
+                            </td>
+                            <td class="text-end">
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm text-end js-pu"
+                                       value="{{ partida.pu|stringformat:'.2f' }}" style="max-width:130px; margin-left:auto;">
+                            </td>
+                            <td class="text-end js-importe" data-categoria="{{ partida.categoria }}">
+                                ${{ partida.importe|floatformat:2 }}
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary" title="Editar"
+                                        data-bs-toggle="modal" data-bs-target="#modalPartida"
+                                        onclick='prepararEdicion({{ partida.pk }}, {{ partida.descripcion|escapejs|stringformat:"r" }}, "{{ partida.categoria }}", "{{ partida.unidad }}", "{{ partida.cantidad }}", "{{ partida.pu }}", "{{ partida.orden }}", {{ partida.concepto_id|default:"null" }})'>
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <form method="post" action="{% url 'partida_eliminar' presupuesto.pk partida.pk %}"
+                                      class="d-inline" onsubmit="return confirm('¿Eliminar esta partida?');">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% endfor %}
+                </table>
+                <div class="p-3 border-top bg-light small text-muted">
+                    Al cambiar cantidad o PU el desglose se recalcula al instante.
+                    <strong>Guarda cada renglón</strong> con el lápiz para persistirlo.
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-list-ul fs-1 d-block mb-3"></i>
+                    <p class="mb-3">Este presupuesto no tiene partidas.</p>
+                    <button class="btn btn-verde btn-sm" data-bs-toggle="modal" data-bs-target="#modalPartida"
+                            onclick="prepararAlta()">Agregar la primera</button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ================= Control de obra (Fase 4) ======================= -->
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">
+                    <i class="bi bi-clipboard-check"></i> Control de obra
+                    <span class="semaforo-dot semaforo-{{ presupuesto.semaforo }} ms-2"></span>
+                    <span class="small text-muted">{{ presupuesto.semaforo_display }}</span>
+                </span>
+                <span>
+                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
+                            data-bs-target="#modalOrden" onclick="prepararOrdenAlta()">+ Orden de cambio</button>
+                    <button class="btn btn-sm btn-verde" data-bs-toggle="modal"
+                            data-bs-target="#modalGasto" onclick="prepararGastoAlta()">+ Registrar gasto</button>
+                </span>
+            </div>
+
+            <!-- KPIs del §4.6 -->
+            <div class="card-body border-bottom">
+                <div class="row g-3 text-center">
+                    <div class="col-6 col-md-3">
+                        <div class="small text-muted">Gasto real</div>
+                        <div class="fs-6 fw-bold">${{ presupuesto.gasto_real|floatformat:2 }}</div>
+                        <div class="small text-muted">{{ presupuesto.avance_gasto_pct|floatformat:1 }}% del techo</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="small text-muted">Desviación acumulada</div>
+                        <div class="fs-6 fw-bold {% if presupuesto.desviacion_acumulada > 0 %}text-danger{% else %}text-success{% endif %}">
+                            ${{ presupuesto.desviacion_acumulada|floatformat:2 }}
+                        </div>
+                        <div class="small text-muted">{{ presupuesto.desviacion_acumulada_pct|floatformat:1 }}%</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="small text-muted">Contingencia consumida</div>
+                        <div class="fs-6 fw-bold {% if presupuesto.contingencia_consumida_pct >= 70 %}text-danger{% endif %}">
+                            {{ presupuesto.contingencia_consumida_pct|floatformat:1 }}%
+                        </div>
+                        <div class="small text-muted">quedan ${{ presupuesto.contingencia_disponible|floatformat:2 }}</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="small text-muted">Costo real / m²</div>
+                        <div class="fs-6 fw-bold">
+                            {% if presupuesto.costo_real_m2 %}${{ presupuesto.costo_real_m2|floatformat:2 }}{% else %}—{% endif %}
+                        </div>
+                        <div class="small text-muted">
+                            {{ presupuesto.ordenes_aprobadas_count }} orden(es) · ${{ presupuesto.monto_ordenes_aprobadas|floatformat:0 }}
+                        </div>
+                    </div>
+                </div>
+                {% if presupuesto.contingencia_consumida_pct >= 70 %}
+                <div class="alert alert-warning py-2 mt-3 mb-0 small">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Consumida el {{ presupuesto.contingencia_consumida_pct|floatformat:0 }}% de la reserva.
+                    El diseño marca el 70% como señal de alerta temprana.
+                </div>
+                {% endif %}
+                {% if presupuesto.partidas_desviadas %}
+                <div class="alert alert-danger py-2 mt-3 mb-0 small">
+                    <i class="bi bi-graph-up"></i>
+                    {{ presupuesto.partidas_desviadas|length }} partida(s) desviadas más del {{ umbral_partida }}%:
+                    {% for p in presupuesto.partidas_desviadas|slice:":3" %}
+                    <strong>{{ p.descripcion|truncatechars:34 }}</strong> (+{{ p.desviacion_pct|floatformat:0 }}%){% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Gastos reales -->
+            <div class="card-body border-bottom p-0">
+                <div class="px-3 pt-3 fw-semibold small text-uppercase text-muted">Gastos reales</div>
+                {% if gastos %}
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Fecha</th><th>Descripción</th><th>Partida</th><th>Proveedor</th>
+                            <th class="text-end">Importe</th><th>Factura</th><th style="width:80px"></th></tr>
+                    </thead>
+                    <tbody>
+                        {% for g in gastos %}
+                        <tr>
+                            <td class="small">{{ g.fecha|date:"d/M/Y" }}</td>
+                            <td>{{ g.descripcion|truncatechars:40 }}</td>
+                            <td class="small">{% if g.partida %}{{ g.partida.descripcion|truncatechars:28 }}{% else %}<span class="text-muted">sin imputar</span>{% endif %}</td>
+                            <td class="small">{{ g.proveedor|default:"—" }}</td>
+                            <td class="text-end">${{ g.importe_real|floatformat:2 }}</td>
+                            <td class="small">{{ g.factura|default:"—" }}</td>
+                            <td class="text-end">
+                                <form method="post" action="{% url 'gasto_eliminar' presupuesto.pk g.pk %}"
+                                      class="d-inline" onsubmit="return confirm('¿Eliminar este gasto?');">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted small px-3 py-3 mb-0">Sin gastos registrados todavía.</p>
+                {% endif %}
+            </div>
+
+            <!-- Desviación por partida (§4.3) -->
+            {% if grupos and presupuesto.gasto_real > 0 %}
+            <div class="card-body border-bottom p-0">
+                <div class="px-3 pt-3 fw-semibold small text-uppercase text-muted">Real vs. presupuestado por partida</div>
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Partida</th><th class="text-end">Presupuestado</th>
+                            <th class="text-end">Real</th><th class="text-end">Desviación</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for grupo in grupos %}{% for p in grupo.partidas %}{% if p.gasto_real > 0 %}
+                        <tr {% if p.excede_umbral %}class="table-danger"{% endif %}>
+                            <td>{{ p.descripcion|truncatechars:44 }}</td>
+                            <td class="text-end">${{ p.importe|floatformat:2 }}</td>
+                            <td class="text-end">${{ p.gasto_real|floatformat:2 }}</td>
+                            <td class="text-end {% if p.desviacion > 0 %}text-danger{% else %}text-success{% endif %}">
+                                ${{ p.desviacion|floatformat:2 }} ({{ p.desviacion_pct|floatformat:0 }}%)
+                            </td>
+                        </tr>
+                        {% endif %}{% endfor %}{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <!-- Órdenes de cambio -->
+            <div class="card-body p-0">
+                <div class="px-3 pt-3 fw-semibold small text-uppercase text-muted">Órdenes de cambio</div>
+                {% if ordenes %}
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Fecha</th><th>Descripción</th><th>Fuente</th>
+                            <th class="text-end">Importe</th><th>Estado</th><th style="width:150px"></th></tr>
+                    </thead>
+                    <tbody>
+                        {% for o in ordenes %}
+                        <tr>
+                            <td class="small">{{ o.fecha|date:"d/M/Y" }}</td>
+                            <td>{{ o.descripcion|truncatechars:38 }}
+                                <div class="small text-muted">{{ o.motivo|truncatechars:56 }}</div></td>
+                            <td class="small">
+                                {% if o.fuente == 'capital_adicional' %}
+                                <span class="badge bg-info text-dark">capital adicional</span>
+                                {% else %}<span class="badge bg-secondary">contingencia</span>{% endif %}
+                            </td>
+                            <td class="text-end">${{ o.importe|floatformat:2 }}</td>
+                            <td>
+                                {% if o.estado == 'aprobada' %}<span class="badge bg-success">aprobada</span>
+                                {% elif o.estado == 'rechazada' %}<span class="badge bg-danger">rechazada</span>
+                                {% else %}<span class="badge bg-warning text-dark">solicitada</span>{% endif %}
+                                {% if o.aprobado_por %}<div class="small text-muted">{{ o.aprobado_por.username }}</div>{% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if o.estado == 'solicitada' %}
+                                <form method="post" action="{% url 'orden_resolver' presupuesto.pk o.pk 'aprobada' %}" class="d-inline">
+                                    {% csrf_token %}<button class="btn btn-sm btn-outline-success" title="Aprobar"><i class="bi bi-check-lg"></i></button>
+                                </form>
+                                <form method="post" action="{% url 'orden_resolver' presupuesto.pk o.pk 'rechazada' %}" class="d-inline">
+                                    {% csrf_token %}<button class="btn btn-sm btn-outline-warning" title="Rechazar"><i class="bi bi-x-lg"></i></button>
+                                </form>
+                                {% endif %}
+                                <form method="post" action="{% url 'orden_eliminar' presupuesto.pk o.pk %}" class="d-inline"
+                                      onsubmit="return confirm('¿Eliminar esta orden?');">
+                                    {% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="p-3 small text-muted border-top">
+                    Aprobar con <strong>capital adicional</strong> sube el presupuesto aprobado;
+                    con cargo a <strong>contingencia</strong> consume reserva y acerca el amarillo.
+                </div>
+                {% else %}
+                <p class="text-muted small px-3 py-3 mb-0">
+                    Sin órdenes de cambio. Ningún cambio de alcance debería ejecutarse sin una.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= Columna derecha: desglose en vivo =================== -->
+    <div class="col-xl-4">
+        {% if impacto %}
+        <div class="card shadow-sm mb-3 border-{% if impacto.simulado.semaforo == 'verde' %}success{% elif impacto.simulado.semaforo == 'amarillo' %}warning{% elif impacto.simulado.semaforo == 'rojo' %}danger{% else %}secondary{% endif %}">
+            <div class="card-header bg-white fw-semibold">
+                <i class="bi bi-graph-up-arrow"></i> Impacto en el ROI
+            </div>
+            <div class="card-body">
+                <p class="mb-3">
+                    {% if impacto.ya_es_activo %}
+                    Este presupuesto <strong>ya alimenta</strong> el análisis de la propiedad:
+                    {% else %}
+                    Con este presupuesto, la propiedad quedaría en:
+                    {% endif %}
+                </p>
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <span class="semaforo-dot semaforo-{{ impacto.simulado.semaforo }}"
+                          style="width:22px;height:22px;"></span>
+                    <div>
+                        <div class="fs-4 fw-bold mb-0">ROI {{ impacto.simulado.roi|floatformat:1 }}%</div>
+                        <div class="small text-muted">
+                            anualizado {{ impacto.simulado.roi_anualizado|floatformat:1 }}% ·
+                            recuperación {{ impacto.simulado.anos_recuperacion|floatformat:1 }} años
+                        </div>
+                    </div>
+                </div>
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="text-muted small">Inversión total</td>
+                            <td class="text-end small">${{ impacto.simulado.inversion_total|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted small">Utilidad potencial</td>
+                            <td class="text-end small">${{ impacto.simulado.utilidad_potencial|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted small">Descuento vs. mercado</td>
+                            <td class="text-end small">{{ impacto.simulado.descuento_mercado|floatformat:1 }}%</td>
+                        </tr>
+                        {% if impacto.actual and not impacto.ya_es_activo %}
+                        <tr class="border-top">
+                            <td class="text-muted small">ROI vigente hoy</td>
+                            <td class="text-end small">{{ impacto.actual.roi|floatformat:1 }}%
+                                <span class="semaforo-dot semaforo-{{ impacto.actual.semaforo }}"></span>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                {% if not impacto.ya_es_activo %}
+                <div class="alert alert-light border small mt-3 mb-0">
+                    Cifras <strong>simuladas</strong>: no se ha guardado nada en la propiedad.
+                    Marca el presupuesto como <em>activo</em> para que mande sobre el ROI.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% elif presupuesto.propiedad %}
+        <div class="alert alert-secondary small">
+            La propiedad no tiene precio publicado, así que no hay ROI que calcular.
+        </div>
+        {% endif %}
+
+        <div class="card shadow-sm position-sticky" style="top:1rem;">
+            <div class="card-header bg-white fw-semibold">Desglose de capas</div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td>Costo directo</td>
+                            <td class="text-end fw-semibold" id="capaDirecto">${{ presupuesto.subtotal_directo|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>+ Indirectos <span class="text-muted" id="lblIndirectos">({{ presupuesto.pct_indirectos }}%)</span></td>
+                            <td class="text-end" id="capaIndirectos">${{ presupuesto.monto_indirectos|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>+ Contingencia <span class="text-muted" id="lblContingencia">({{ presupuesto.pct_contingencia }}%)</span></td>
+                            <td class="text-end" id="capaContingencia">${{ presupuesto.monto_contingencia|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td>+ Utilidad <span class="text-muted" id="lblUtilidad">({{ presupuesto.pct_utilidad }}%)</span></td>
+                            <td class="text-end" id="capaUtilidad">${{ presupuesto.monto_utilidad|floatformat:2 }}</td>
+                        </tr>
+                        <tr id="filaIva" {% if not presupuesto.aplica_iva %}class="d-none"{% endif %}>
+                            <td>+ IVA <span class="text-muted" id="lblIva">({{ presupuesto.pct_iva }}%)</span></td>
+                            <td class="text-end" id="capaIva">${{ presupuesto.monto_iva|floatformat:2 }}</td>
+                        </tr>
+                        <tr class="table-light">
+                            <td class="fw-bold">TOTAL <span class="text-muted fw-normal small">(comercial)</span></td>
+                            <td class="text-end fw-bold fs-5" id="capaTotal">${{ presupuesto.total|floatformat:2 }}</td>
+                        </tr>
+                        <tr class="border-top border-2">
+                            <td class="fw-semibold text-success">
+                                Costo que alimenta el ROI
+                                <div class="text-muted fw-normal small">directo + indirectos + contingencia</div>
+                            </td>
+                            <td class="text-end fw-bold text-success" id="capaCostoRoi">
+                                ${{ presupuesto.costo_para_roi|floatformat:2 }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted small">Costo por m² (comercial)</td>
+                            <td class="text-end text-muted small" id="capaCostoM2">
+                                {% if presupuesto.costo_m2 %}${{ presupuesto.costo_m2|floatformat:2 }}{% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted small">Costo por m² (para ROI)</td>
+                            <td class="text-end text-muted small" id="capaCostoRoiM2">
+                                {% if presupuesto.costo_roi_m2 %}${{ presupuesto.costo_roi_m2|floatformat:2 }}{% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted small">Directo / total</td>
+                            <td class="text-end text-muted small" id="capaRatio">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="alert alert-warning py-2 mt-3 mb-0 small d-none" id="avisoSinGuardar">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Cifras recalculadas en pantalla. Guarda para persistirlas.
+                </div>
+                <p class="small text-muted mt-3 mb-0">
+                    El costo directo suele ser el 60–70% del total. Si sale muy por
+                    encima, faltan capas; muy por debajo, revisa los porcentajes.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================ Modal de partida ========================== -->
+<div class="modal fade" id="modalPartida" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post" id="formPartida" action="{% url 'partida_crear' presupuesto.pk %}">
+            {% csrf_token %}
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="tituloModalPartida">Agregar partida</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3 position-relative">
+                        <label class="form-label">Buscar en el catálogo</label>
+                        <input type="text" class="form-control" id="buscaConcepto" autocomplete="off"
+                               placeholder="Escribe código o descripción (ej. PIN-001, pintura)…">
+                        <div class="list-group position-absolute w-100 shadow d-none" id="resultadosConcepto"
+                             style="z-index:1080; max-height:260px; overflow:auto;"></div>
+                        <div class="form-text">
+                            Al elegir un concepto se copian descripción, unidad y PU;
+                            <strong>quedan editables</strong> y el precio se congela en este renglón.
+                        </div>
+                    </div>
+                    {{ partida_form.concepto }}
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label" for="{{ partida_form.descripcion.id_for_label }}">Descripción</label>
+                            {{ partida_form.descripcion }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ partida_form.categoria.id_for_label }}">Categoría (partida)</label>
+                            {{ partida_form.categoria }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ partida_form.unidad.id_for_label }}">Unidad</label>
+                            {{ partida_form.unidad }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ partida_form.cantidad.id_for_label }}">Cantidad</label>
+                            {{ partida_form.cantidad }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ partida_form.pu.id_for_label }}">Precio unitario</label>
+                            {{ partida_form.pu }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ partida_form.orden.id_for_label }}">Orden</label>
+                            {{ partida_form.orden }}
+                        </div>
+                        <div class="col-12">
+                            <div class="alert alert-light border mb-0 d-flex justify-content-between">
+                                <span>Importe del renglón</span>
+                                <strong id="importeModal">$0.00</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-verde">Guardar partida</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ===================== Modal: gasto real (§4.3) ========================== -->
+<div class="modal fade" id="modalGasto" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post" id="formGasto" action="{% url 'gasto_crear' presupuesto.pk %}">
+            {% csrf_token %}
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Registrar gasto real</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ gasto_form.fecha.id_for_label }}">Fecha</label>
+                            {{ gasto_form.fecha }}
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="{{ gasto_form.descripcion.id_for_label }}">Descripción</label>
+                            {{ gasto_form.descripcion }}
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="{{ gasto_form.partida.id_for_label }}">Imputar a partida</label>
+                            {{ gasto_form.partida }}
+                            <div class="form-text">Opcional. Sin partida cuenta al total, pero no a la desviación por renglón.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ gasto_form.importe_real.id_for_label }}">Importe pagado</label>
+                            {{ gasto_form.importe_real }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ gasto_form.proveedor.id_for_label }}">Proveedor</label>
+                            {{ gasto_form.proveedor }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ gasto_form.factura.id_for_label }}">Factura</label>
+                            {{ gasto_form.factura }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="{{ gasto_form.notas.id_for_label }}">Notas</label>
+                            {{ gasto_form.notas }}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-verde">Guardar gasto</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ================== Modal: orden de cambio (§4.2) ======================== -->
+<div class="modal fade" id="modalOrden" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form method="post" id="formOrden" action="{% url 'orden_crear' presupuesto.pk %}">
+            {% csrf_token %}
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Orden de cambio</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light border small">
+                        Ningún cambio de alcance debería ejecutarse sin una orden que diga
+                        <strong>qué se agrega, cuánto cuesta y de dónde sale el dinero</strong>.
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ orden_form.fecha.id_for_label }}">Fecha</label>
+                            {{ orden_form.fecha }}
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="{{ orden_form.descripcion.id_for_label }}">Descripción</label>
+                            {{ orden_form.descripcion }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="{{ orden_form.motivo.id_for_label }}">Motivo</label>
+                            {{ orden_form.motivo }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ orden_form.importe.id_for_label }}">Importe</label>
+                            {{ orden_form.importe }}
+                            <div class="form-text">Negativo si REDUCE alcance.</div>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="{{ orden_form.fuente.id_for_label }}">¿De dónde sale el dinero?</label>
+                            {{ orden_form.fuente }}
+                            <div class="form-text">
+                                Contingencia consume reserva y acerca el amarillo; capital adicional
+                                sube el presupuesto aprobado.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-verde">Guardar como solicitada</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ---------------------------------------------------------------------------
+// Desglose EN VIVO. Replica el cálculo de Presupuesto (models.py): las capas van
+// EN CASCADA y cada una se redondea a centavos, igual que _pct() en el modelo.
+// Si aquí se sumara todo sobre el directo, la pantalla y el modelo darían
+// números distintos y el usuario no sabría a cuál creerle.
+// ---------------------------------------------------------------------------
+const URL_CATALOGO = "{% url 'catalogo_buscar' %}";
+const URL_PARTIDA_CREAR = "{% url 'partida_crear' presupuesto.pk %}";
+const URL_PARTIDA_EDITAR = "{% url 'partida_editar' presupuesto.pk 0 %}";
+
+const pesos = (n) => '$' + n.toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const centavos = (n) => Math.round(n * 100) / 100;   // mismo redondeo que quantize('0.01')
+const num = (valor) => { const n = parseFloat(valor); return isNaN(n) ? 0 : n; };
+
+function pctDe(base, porcentaje) {
+    return centavos(base * porcentaje / 100);
+}
+
+function recalcular(marcarSinGuardar) {
+    let directo = 0;
+    const porCategoria = {};
+
+    document.querySelectorAll('#tablaPartidas tr[data-partida]').forEach((fila) => {
+        const cantidad = num(fila.querySelector('.js-cantidad').value);
+        const pu = num(fila.querySelector('.js-pu').value);
+        const celda = fila.querySelector('.js-importe');
+        const importe = centavos(cantidad * pu);
+        celda.textContent = pesos(importe);
+        directo += importe;
+        const cat = celda.dataset.categoria;
+        porCategoria[cat] = (porCategoria[cat] || 0) + importe;
+    });
+
+    Object.entries(porCategoria).forEach(([cat, subtotal]) => {
+        const celda = document.querySelector(`[data-subtotal-categoria="${cat}"]`);
+        if (celda) celda.textContent = pesos(subtotal);
+    });
+
+    const pIndirectos = num(document.getElementById('{{ form.pct_indirectos.id_for_label }}').value);
+    const pContingencia = num(document.getElementById('{{ form.pct_contingencia.id_for_label }}').value);
+    const pUtilidad = num(document.getElementById('{{ form.pct_utilidad.id_for_label }}').value);
+    const pIva = num(document.getElementById('{{ form.pct_iva.id_for_label }}').value);
+    const aplicaIva = document.getElementById('{{ form.aplica_iva.id_for_label }}').checked;
+
+    directo = centavos(directo);
+    const indirectos = pctDe(directo, pIndirectos);
+    const contingencia = pctDe(directo + indirectos, pContingencia);          // cascada
+    const utilidad = pctDe(directo + indirectos + contingencia, pUtilidad);   // cascada
+    const subtotal = directo + indirectos + contingencia + utilidad;
+    const iva = aplicaIva ? pctDe(subtotal, pIva) : 0;
+    const total = subtotal + iva;
+
+    document.getElementById('capaDirecto').textContent = pesos(directo);
+    document.getElementById('capaIndirectos').textContent = pesos(indirectos);
+    document.getElementById('capaContingencia').textContent = pesos(contingencia);
+    document.getElementById('capaUtilidad').textContent = pesos(utilidad);
+    document.getElementById('capaIva').textContent = pesos(iva);
+    document.getElementById('capaTotal').textContent = pesos(total);
+    // Lo que alimenta el ROI: directo + indirectos + contingencia. NO incluye
+    // utilidad ni IVA — la obra se administra directamente, así que el margen no
+    // es un desembolso. Es independiente de pct_utilidad a propósito.
+    const costoRoi = directo + indirectos + contingencia;
+    document.getElementById('capaCostoRoi').textContent = pesos(costoRoi);
+    document.getElementById('filaIva').classList.toggle('d-none', !aplicaIva);
+
+    document.getElementById('lblIndirectos').textContent = `(${pIndirectos}%)`;
+    document.getElementById('lblContingencia').textContent = `(${pContingencia}%)`;
+    document.getElementById('lblUtilidad').textContent = `(${pUtilidad}%)`;
+    document.getElementById('lblIva').textContent = `(${pIva}%)`;
+
+    const area = num(document.getElementById('{{ form.area_m2.id_for_label }}').value);
+    document.getElementById('capaCostoM2').textContent = area > 0 ? pesos(centavos(total / area)) : '—';
+    document.getElementById('capaCostoRoiM2').textContent =
+        area > 0 ? pesos(centavos(costoRoi / area)) : '—';
+    document.getElementById('capaRatio').textContent =
+        total > 0 ? (directo / total * 100).toFixed(1) + '%' : '—';
+
+    if (marcarSinGuardar) {
+        document.getElementById('avisoSinGuardar').classList.remove('d-none');
+    }
+}
+
+document.querySelectorAll('.js-cantidad, .js-pu').forEach((campo) => {
+    campo.addEventListener('input', () => recalcular(true));
+});
+[
+    '{{ form.pct_indirectos.id_for_label }}', '{{ form.pct_contingencia.id_for_label }}',
+    '{{ form.pct_utilidad.id_for_label }}', '{{ form.pct_iva.id_for_label }}',
+    '{{ form.area_m2.id_for_label }}',
+].forEach((id) => {
+    const campo = document.getElementById(id);
+    if (campo) campo.addEventListener('input', () => recalcular(true));
+});
+document.getElementById('{{ form.aplica_iva.id_for_label }}')
+        .addEventListener('change', () => recalcular(true));
+
+recalcular(false);   // sincroniza el ratio al cargar, sin marcar "sin guardar"
+
+// ---------------------------------------------------------------------------
+// Modal de partida: alta, edición y autocompletado del catálogo.
+// ---------------------------------------------------------------------------
+const campoConcepto = document.getElementById('{{ partida_form.concepto.id_for_label }}');
+const campoDescripcion = document.getElementById('{{ partida_form.descripcion.id_for_label }}');
+const campoCategoria = document.getElementById('{{ partida_form.categoria.id_for_label }}');
+const campoUnidad = document.getElementById('{{ partida_form.unidad.id_for_label }}');
+const campoCantidad = document.getElementById('{{ partida_form.cantidad.id_for_label }}');
+const campoPu = document.getElementById('{{ partida_form.pu.id_for_label }}');
+const campoOrden = document.getElementById('{{ partida_form.orden.id_for_label }}');
+const formPartida = document.getElementById('formPartida');
+
+function importeModal() {
+    document.getElementById('importeModal').textContent =
+        pesos(centavos(num(campoCantidad.value) * num(campoPu.value)));
+}
+[campoCantidad, campoPu].forEach((c) => c.addEventListener('input', importeModal));
+
+function prepararGastoAlta() {
+    document.getElementById('formGasto').action = "{% url 'gasto_crear' presupuesto.pk %}";
+}
+
+function prepararOrdenAlta() {
+    // Se crea siempre como "solicitada": aprobar mueve los techos y es un acto
+    // aparte, con su propio botón y su propio POST.
+    document.getElementById('formOrden').action = "{% url 'orden_crear' presupuesto.pk %}";
+}
+
+function prepararAlta() {
+    formPartida.action = URL_PARTIDA_CREAR;
+    document.getElementById('tituloModalPartida').textContent = 'Agregar partida';
+    [campoConcepto, campoDescripcion, campoCantidad, campoPu].forEach((c) => { c.value = ''; });
+    campoOrden.value = 0;
+    document.getElementById('buscaConcepto').value = '';
+    importeModal();
+}
+
+function prepararEdicion(pk, descripcion, categoria, unidad, cantidad, pu, orden, conceptoId) {
+    formPartida.action = URL_PARTIDA_EDITAR.replace(/0\/$/, pk + '/');
+    document.getElementById('tituloModalPartida').textContent = 'Editar partida';
+    campoDescripcion.value = descripcion;
+    campoCategoria.value = categoria;
+    campoUnidad.value = unidad;
+    campoCantidad.value = cantidad;
+    campoPu.value = pu;
+    campoOrden.value = orden;
+    campoConcepto.value = conceptoId === null ? '' : conceptoId;
+    document.getElementById('buscaConcepto').value = '';
+    importeModal();
+}
+
+// Autocompletado: al elegir se COPIAN los valores al renglón y quedan editables.
+const cajaBusqueda = document.getElementById('buscaConcepto');
+const listaResultados = document.getElementById('resultadosConcepto');
+let temporizador = null;
+
+cajaBusqueda.addEventListener('input', () => {
+    clearTimeout(temporizador);
+    const termino = cajaBusqueda.value.trim();
+    if (termino.length < 2) { listaResultados.classList.add('d-none'); return; }
+    // Debounce: sin esto se dispara una consulta por tecla.
+    temporizador = setTimeout(() => buscarConceptos(termino), 250);
+});
+
+async function buscarConceptos(termino) {
+    const respuesta = await fetch(`${URL_CATALOGO}?q=${encodeURIComponent(termino)}`);
+    const datos = await respuesta.json();
+    listaResultados.innerHTML = '';
+    if (!datos.resultados.length) {
+        listaResultados.innerHTML =
+            '<div class="list-group-item text-muted small">Sin coincidencias en el catálogo.</div>';
+    }
+    datos.resultados.forEach((c) => {
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.className = 'list-group-item list-group-item-action';
+        boton.innerHTML =
+            `<div class="d-flex justify-content-between">
+                <span><span class="badge bg-light text-muted border me-2">${c.codigo}</span>${c.descripcion}</span>
+                <strong class="ms-3">${pesos(parseFloat(c.pu))}/${c.unidad}</strong>
+             </div>`;
+        boton.addEventListener('click', () => elegirConcepto(c));
+        listaResultados.appendChild(boton);
+    });
+    listaResultados.classList.remove('d-none');
+}
+
+function elegirConcepto(c) {
+    campoConcepto.value = c.id;
+    campoDescripcion.value = c.descripcion;
+    campoCategoria.value = c.categoria;
+    campoUnidad.value = c.unidad;
+    campoPu.value = parseFloat(c.pu).toFixed(2);
+    if (!num(campoCantidad.value)) campoCantidad.value = '1.00';
+    listaResultados.classList.add('d-none');
+    cajaBusqueda.value = '';
+    importeModal();
+}
+
+document.addEventListener('click', (evento) => {
+    if (!cajaBusqueda.contains(evento.target) && !listaResultados.contains(evento.target)) {
+        listaResultados.classList.add('d-none');
+    }
+});
+</script>
+{% endblock %}
