@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'propiedades.apps.PropiedadesConfig',
     'analisis',
     'alertas',
+    'presupuestos.apps.PresupuestosConfig',
 ]
 
 MIDDLEWARE = [
