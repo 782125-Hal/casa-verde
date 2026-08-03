@@ -212,3 +212,37 @@ El `deploy.sh` ejecuta el despliegue de forma segura y en orden:
 El script trae escrita la ruta del entorno virtual en la variable
 `VENV_ACTIVATE`. Si el hosting actualiza la versión de Python (por ejemplo de
 3.9 a 3.11), edita esa línea al inicio de `deploy.sh`.
+
+---
+
+## Cómo analizar una obra nueva (comprar terreno + construir)
+
+Para saber si conviene **comprar un terreno y construir para vender**, la app
+reutiliza el mismo análisis de inversión (ROI + semáforo) que las demás
+propiedades. Son 3 pasos:
+
+1. **Registra el terreno como propiedad.** En el admin (o en la captura del
+   sitio), crea la propiedad con:
+   - **Tipo de inmueble:** `Terreno`.
+   - **Precio publicado:** el precio de compra del terreno.
+   - **m² de terreno** y **zona**. Deja `m² de construcción` vacío.
+
+2. **Crea un presupuesto de obra nueva y actívalo.** En `/presupuestos/nuevo/`:
+   - Liga el presupuesto a esa propiedad y elige **Tipo de obra: `Obra nueva`**.
+   - Captura las **partidas** (materiales, mano de obra, etc.) y el **área a
+     construir** (`area_m2`). El costo de la obra sale de aquí.
+   - Marca el presupuesto como **activo** (`es_activo`). Solo puede haber **uno
+     activo por propiedad**: es el que manda sobre el ROI.
+
+3. **Abre el análisis de la propiedad.** El ROI y el semáforo ya comparan:
+   - **Valor de venta proyectado** = la casa terminada (suelo + área del
+     presupuesto, al valor de **casa** de la zona), contra
+   - **Inversión** = terreno + costos de compra + el costo del presupuesto de obra.
+
+   Un aviso en *Riesgos* recuerda que el valor incluye construcción **proyectada,
+   aún no edificada** (el ROI asume que se construye y se vende a valor de mercado).
+
+> **Requisito de datos:** la zona debe tener capturado un **valor por m² de casa**
+> (`Mercado → Valores por metro cuadrado`, tipo *Casa*). Sin él no hay contra qué
+> comparar la casa terminada y el análisis se queda en gris/rojo. `seed_datos` ya
+> carga estos valores para las zonas de Tijuana.
