@@ -229,6 +229,11 @@ class OportunidadService:
             riesgos.append('Alto riesgo físico/estructural')
         if valoracion['superficie_estimada']:
             riesgos.append('Superficie estimada de forma conservadora')
+        if valoracion.get('construccion_proyectada'):
+            riesgos.append(
+                'El valor incluye la casa proyectada del presupuesto de obra nueva '
+                '(aún no construida): el ROI asume que se edifica y se vende a valor de mercado'
+            )
         if remodelacion['es_estimado'] and remodelacion['presupuesto'] > 0:
             riesgos.append('Presupuesto de remodelación con costo genérico (zona sin costo capturado)')
         if remodelacion.get('origen') == 'presupuesto':

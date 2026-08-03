@@ -17,6 +17,7 @@ from mercado.models import (
 from propiedades.models import Propiedad
 from services.oportunidad import OportunidadService
 from services.remodelacion import RemodelacionService
+from services.valoracion import ValoracionService
 
 
 class BaseDatosMixin:
@@ -145,3 +146,85 @@ class IntegracionAnalisisTests(BaseDatosMixin, TestCase):
         self.assertGreater(a_completa.reparaciones, a_ligera.reparaciones)
         self.assertLess(a_completa.utilidad_potencial, a_ligera.utilidad_potencial)
         self.assertLess(a_completa.roi, a_ligera.roi)
+
+
+class ObraNuevaValuacionTests(BaseDatosMixin, TestCase):
+    """Comprar un terreno + construir: la valuación debe proyectar la casa
+    terminada cuando hay un presupuesto de obra nueva activo."""
+
+    def setUp(self):
+        self._crear_base()
+        # Valor de terreno crudo de la zona (distinto del terreno "de casa").
+        ValorMetroCuadrado.objects.create(
+            zona=self.zona, tipo_inmueble='terreno',
+            valor_terreno_m2=Decimal('5000'),
+            valor_construccion_m2=Decimal('0'),
+            fecha_actualizacion=date.today(),
+        )
+
+    def _terreno(self, **kwargs):
+        defaults = dict(
+            zona=self.zona,
+            titulo='Terreno para construir',
+            precio_publicado=Decimal('900000'),
+            m2_terreno=Decimal('160'),
+            m2_construccion=None,
+            tipo_inmueble='terreno',
+            estado_fisico='excelente',
+        )
+        defaults.update(kwargs)
+        return Propiedad.objects.create(**defaults)
+
+    def _presupuesto_obra_nueva(self, propiedad, area=Decimal('150'), activo=True):
+        from presupuestos.choices import TIPO_OBRA_NUEVA
+        from presupuestos.models import Presupuesto
+        return Presupuesto.objects.create(
+            propiedad=propiedad, nombre='Casa proyectada',
+            tipo_obra=TIPO_OBRA_NUEVA, area_m2=area, es_activo=activo,
+        )
+
+    def test_terreno_sin_presupuesto_solo_vale_el_suelo(self):
+        v = ValoracionService.valorar(self._terreno())
+        self.assertFalse(v['construccion_proyectada'])
+        self.assertEqual(v['valor_construccion_estimado'], Decimal('0.00'))
+
+    def test_obra_nueva_activa_proyecta_casa_terminada(self):
+        prop = self._terreno()
+        self._presupuesto_obra_nueva(prop, area=Decimal('150'))
+        v = ValoracionService.valorar(prop)
+
+        self.assertTrue(v['construccion_proyectada'])
+        # Suelo con la referencia de CASA (6000), no la de terreno crudo (5000).
+        self.assertEqual(v['valor_terreno_estimado'], Decimal('960000.00'))   # 160 × 6000
+        # Construcción proyectada = área del presupuesto × valor casa (15000).
+        self.assertEqual(v['valor_construccion_estimado'], Decimal('2250000.00'))  # 150 × 15000
+
+    def test_presupuesto_de_remodelacion_no_proyecta(self):
+        """Solo obra nueva proyecta; un presupuesto de remodelación no."""
+        from presupuestos.choices import TIPO_OBRA_REMODELACION
+        from presupuestos.models import Presupuesto
+        prop = self._terreno()
+        Presupuesto.objects.create(
+            propiedad=prop, nombre='Remodelación', tipo_obra=TIPO_OBRA_REMODELACION,
+            area_m2=Decimal('150'), es_activo=True,
+        )
+        v = ValoracionService.valorar(prop)
+        self.assertFalse(v['construccion_proyectada'])
+        self.assertEqual(v['valor_construccion_estimado'], Decimal('0.00'))
+
+    def test_presupuesto_inactivo_no_proyecta(self):
+        prop = self._terreno()
+        self._presupuesto_obra_nueva(prop, activo=False)
+        v = ValoracionService.valorar(prop)
+        self.assertFalse(v['construccion_proyectada'])
+
+    def test_analisis_de_obra_nueva_es_evaluable(self):
+        """Antes: terreno + obra nueva → siempre rojo (valor solo del suelo).
+        Ahora el análisis proyecta la casa y el ROI es evaluable."""
+        prop = self._terreno()
+        self._presupuesto_obra_nueva(prop, area=Decimal('150'))
+        analisis = OportunidadService.analizar_propiedad(prop)
+
+        self.assertGreater(analisis.valor_construccion_estimado, Decimal('0'))
+        self.assertNotEqual(analisis.semaforo, 'gris')
+        self.assertIn('obra nueva', analisis.riesgos)
