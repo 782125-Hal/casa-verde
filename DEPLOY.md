@@ -175,3 +175,40 @@ Luego **Restart** en Setup Python App.
 - Todo el sitio exige sesión iniciada: un visitante anónimo es redirigido a
   `/login/`. Solo los usuarios que tú crees en el admin pueden ver las
   propiedades, el dashboard y la exportación CSV.
+
+## Despliegue rápido con `deploy.sh`
+
+A partir de ahora, los despliegues de actualizaciones se hacen con el script
+`deploy.sh` incluido en el repositorio, en lugar de correr los comandos a mano.
+
+### Uso
+
+1. Entra a **cPanel → Terminal**.
+2. Corre:
+
+```bash
+   cd ~/casa-verde && bash deploy.sh
+```
+
+3. Al terminar, si el sitio no refleja los cambios, entra a
+   **cPanel → Setup Python App** y presiona **Restart**.
+
+### Qué hace el script
+
+El `deploy.sh` ejecuta el despliegue de forma segura y en orden:
+
+1. Activa el entorno virtual (`/home/marhalco/virtualenv/casa-verde/3.9`).
+2. **Verifica que exista `SECRET_KEY` en `.env` antes de tocar nada.** Si falta,
+   aborta para no dejar la app caída (error 500).
+3. `git pull` para traer los últimos cambios.
+4. `python manage.py migrate` y `collectstatic --noinput`.
+5. **Revisa si algún superusuario todavía usa la contraseña débil `admin123`**
+   y avisa cuál rotar con `python manage.py changepassword <usuario>`.
+6. Solicita el reinicio de la aplicación (`tmp/restart.txt`).
+7. Imprime el último commit desplegado para confirmar la versión.
+
+### Nota de mantenimiento
+
+El script trae escrita la ruta del entorno virtual en la variable
+`VENV_ACTIVATE`. Si el hosting actualiza la versión de Python (por ejemplo de
+3.9 a 3.11), edita esa línea al inicio de `deploy.sh`.
