@@ -13,6 +13,16 @@ from core.views import (
     exportar_propiedades_csv,
     propiedad_detalle,
 )
+# Las vistas del módulo viven en su propia app (Django idiomático), pero las rutas
+# se declaran aquí junto a las demás, que es la convención de este proyecto.
+from presupuestos.views import (
+    PresupuestoListView,
+    catalogo_buscar,
+    partida_eliminar,
+    partida_guardar,
+    presupuesto_crear,
+    presupuesto_detalle,
+)
 
 admin.site.site_header = 'Casa Verde — Administración'
 admin.site.site_title = 'Casa Verde'
@@ -35,4 +45,11 @@ urlpatterns = [
     path('alertas/<int:pk>/leida/', alerta_marcar_leida, name='alerta_leida'),
     path('busqueda/', busqueda_config, name='busqueda_config'),
     path('busqueda/<int:pk>/ejecutar/', busqueda_ejecutar, name='busqueda_ejecutar'),
+    path('presupuestos/', PresupuestoListView.as_view(), name='presupuestos_lista'),
+    path('presupuestos/nuevo/', presupuesto_crear, name='presupuesto_crear'),
+    path('presupuestos/<int:pk>/', presupuesto_detalle, name='presupuesto_detalle'),
+    path('presupuestos/<int:pk>/partidas/nueva/', partida_guardar, name='partida_crear'),
+    path('presupuestos/<int:pk>/partidas/<int:partida_pk>/', partida_guardar, name='partida_editar'),
+    path('presupuestos/<int:pk>/partidas/<int:partida_pk>/eliminar/', partida_eliminar, name='partida_eliminar'),
+    path('catalogo/buscar/', catalogo_buscar, name='catalogo_buscar'),
 ]

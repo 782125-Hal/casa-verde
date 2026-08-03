@@ -1,0 +1,132 @@
+{% extends 'base/base.html' %}
+{% block title %}Nuevo presupuesto — {{ CASA_VERDE.NOMBRE }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0"><i class="bi bi-calculator"></i> Nuevo presupuesto</h1>
+    <a href="{% url 'presupuestos_lista' %}" class="btn btn-sm btn-outline-secondary">Cancelar</a>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white fw-semibold">Identificación</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.nombre.id_for_label }}">Nombre</label>
+                        {{ form.nombre }}
+                        {% if form.nombre.errors %}<div class="text-danger small">{{ form.nombre.errors|striptags }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.propiedad.id_for_label }}">Propiedad ligada</label>
+                        {{ form.propiedad }}
+                        <div class="form-text">Opcional: un presupuesto puede existir sin propiedad.</div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ form.tipo_obra.id_for_label }}">Tipo de obra</label>
+                            {{ form.tipo_obra }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ form.area_m2.id_for_label }}">Área (m²)</label>
+                            {{ form.area_m2 }}
+                            <div class="form-text">Permite comparar el costo real por m².</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mt-3">
+                <div class="card-header bg-white fw-semibold">Plantilla de partidas</div>
+                <div class="card-body">
+                    {{ form.plantilla }}
+                    {% if form.plantilla.errors %}
+                    <div class="text-danger small mt-1">{{ form.plantilla.errors|striptags }}</div>
+                    {% endif %}
+                    <div class="form-text mt-2">
+                        Precarga las partidas típicas con <strong>cantidad 0</strong>: el sistema
+                        no adivina metros cuadrados. Solo ajustas cantidades.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white fw-semibold">Capas del presupuesto</div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        Se aplican <strong>en cascada</strong>: la contingencia sobre
+                        directo + indirectos, y la utilidad sobre todo lo anterior.
+                        El costo directo suele ser solo el 60–70% del total.
+                    </p>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label" for="{{ form.pct_indirectos.id_for_label }}">Indirectos (%)</label>
+                            {{ form.pct_indirectos }}
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="{{ form.pct_contingencia.id_for_label }}">Contingencia (%)</label>
+                            {{ form.pct_contingencia }}
+                            <div class="form-text">Solo para imprevistos reales.</div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="{{ form.pct_utilidad.id_for_label }}">Utilidad (%)</label>
+                            {{ form.pct_utilidad }}
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="{{ form.pct_iva.id_for_label }}">IVA (%)</label>
+                            {{ form.pct_iva }}
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                {{ form.aplica_iva }}
+                                <label class="form-check-label" for="{{ form.aplica_iva.id_for_label }}">
+                                    Aplicar IVA (solo si facturas)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mt-3">
+                <div class="card-header bg-white fw-semibold">Notas</div>
+                <div class="card-body">{{ form.notas }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <button type="submit" class="btn btn-verde">Crear presupuesto</button>
+        <a href="{% url 'presupuestos_lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// La contingencia por defecto depende del tipo de obra (15% remodelación,
+// 8% obra nueva). Solo se ajusta si el usuario no la ha tocado, para no pisar
+// un valor que haya escrito a propósito.
+(function () {
+    const tipo = document.getElementById('{{ form.tipo_obra.id_for_label }}');
+    const contingencia = document.getElementById('{{ form.pct_contingencia.id_for_label }}');
+    if (!tipo || !contingencia) return;
+    const PORDEFECTO = {'remodelacion': '15.00', 'obra_nueva': '8.00'};
+    let tocadoPorUsuario = false;
+    contingencia.addEventListener('input', () => { tocadoPorUsuario = true; });
+    tipo.addEventListener('change', () => {
+        if (tocadoPorUsuario) return;
+        const valor = PORDEFECTO[tipo.value];
+        if (valor) contingencia.value = valor;
+    });
+})();
+</script>
+{% endblock %}
