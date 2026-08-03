@@ -23,6 +23,11 @@ Uso:
     python manage.py seed_catalogo --sobrescribir       # reescribe los existentes
     python manage.py seed_catalogo --zona 3             # PU paramétricos de esa zona
 """
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from datetime import date
 from decimal import Decimal
 

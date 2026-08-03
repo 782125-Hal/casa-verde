@@ -14,6 +14,11 @@ layout se programa a mano en vez de heredarlo del HTML.
 Ambos generadores devuelven ``bytes`` y no escriben a disco: la vista los sirve
 directamente y no queda basura en el servidor.
 """
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from decimal import Decimal
 from io import BytesIO
 

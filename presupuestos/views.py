@@ -15,6 +15,11 @@ ofrece el estimado paramétrico de 1 clic.
 Fase 4: gastos reales, órdenes de cambio y alertas de control de obra.
 Fase 5: exportación a PDF/Excel y reporte de cierre.
 """
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from datetime import date
 from decimal import Decimal
 

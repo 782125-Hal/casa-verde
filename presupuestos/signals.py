@@ -12,6 +12,11 @@ Sobre bucles infinitos: ``analizar_propiedad`` termina guardando la propiedad co
 ``update_fields=['semaforo', 'estatus']``, y el ``post_save`` de ``Propiedad``
 sale temprano ante ese conjunto de campos. La cadena se corta ahí.
 """
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 

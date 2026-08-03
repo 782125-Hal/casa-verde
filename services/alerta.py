@@ -1,4 +1,9 @@
 """Servicio de alertas — Casa Verde (Fase 5)."""
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 import logging
 
 from django.conf import settings

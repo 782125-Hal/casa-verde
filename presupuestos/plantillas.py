@@ -12,6 +12,11 @@ Si un código no existe en el catálogo (porque nadie corrió ``seed_catalogo`` 
 desactivó), la partida simplemente se omite y la vista lo informa: es preferible
 un presupuesto con menos renglones que uno con partidas fantasma.
 """
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from presupuestos.choices import TIPO_OBRA_NUEVA, TIPO_OBRA_REMODELACION
 
 # clave -> {nombre, tipo_obra, descripcion, conceptos: [códigos del catálogo]}

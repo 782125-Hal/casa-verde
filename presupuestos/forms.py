@@ -1,4 +1,9 @@
 """Formularios del módulo de presupuestos."""
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from django import forms
 
 from presupuestos.choices import DEFAULT_PCT_CONTINGENCIA

@@ -25,6 +25,11 @@ todo lo de aguas abajo —inversión total, ROI, semáforo, alertas— sigue sie
 mismo código de siempre. Duplicar la fórmula del ROI aquí habría creado dos
 verdades que se desincronizan.
 """
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from decimal import Decimal
 
 from core.choices import DEFAULT_COSTO_REMODELACION_M2

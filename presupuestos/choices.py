@@ -7,6 +7,10 @@ Los porcentajes por defecto salen de la §2.4 del diseño: el costo directo es s
 el 60–70% del costo total, así que un presupuesto sin capas queda corto un 30–40%.
 """
 
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 # --- Tipo de obra --------------------------------------------------------------
 TIPO_OBRA_REMODELACION = 'remodelacion'
 TIPO_OBRA_NUEVA = 'obra_nueva'

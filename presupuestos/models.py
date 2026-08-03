@@ -26,6 +26,11 @@ invalidación explícita —pero no antes de tener el problema—.
 acumulado de las anteriores, no todas sobre el costo directo. Presupuestar solo
 el directo deja corto un 30–40%, que es la causa #1 de obras que se disparan.
 """
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from decimal import Decimal
 
 from django.core.validators import MinValueValidator

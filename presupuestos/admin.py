@@ -4,6 +4,11 @@ Fase 1: el admin ES la interfaz de captura, así que carga con más peso del
 habitual. Los totales calculados se exponen como columnas de solo lectura para
 que el desglose de capas (§2.4) se vea sin abrir la futura pestaña.
 """
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from django.contrib import admin
 from django.utils.html import format_html
 

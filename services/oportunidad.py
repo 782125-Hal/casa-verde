@@ -9,6 +9,11 @@ Fórmulas financieras:
   ROI anualizado     = ROI / años_recuperación
   Años recuperación  = inversión_total / utilidad_potencial_anual_estimada
 """
+
+# El servidor corre Python 3.9: sin esto, una anotación como `Decimal | None`
+# se evalúa al importar y truena con "unsupported operand type(s) for |".
+from __future__ import annotations
+
 from decimal import Decimal
 
 from analisis.models import AnalisisInversion
