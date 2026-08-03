@@ -88,6 +88,11 @@ tu página actual en `marhal.com.mx`.
    Luego ábrelo con el editor del File Manager (o `nano ~/casa-verde/.env`) y
    sustituye `PEGA_AQUI_LA_CLAVE_GENERADA` por la clave real.
 
+   > **`SECRET_KEY` es obligatoria en producción.** Sin ella la app se niega a
+   > arrancar (error `ImproperlyConfigured`) en vez de usar una clave conocida
+   > que permitiría falsificar sesiones de administrador. Si el sitio devuelve
+   > error 500 tras un despliegue, revisa primero que esta línea siga en el `.env`.
+
 ## Paso 6 — Preparar base de datos y archivos estáticos
 
 Con el entorno virtual activo y dentro de `~/casa-verde`:
@@ -95,9 +100,32 @@ Con el entorno virtual activo y dentro de `~/casa-verde`:
 ```bash
 python manage.py migrate
 python manage.py collectstatic --noinput
-python manage.py createsuperuser        # usa una contraseña FUERTE (no admin123)
+python manage.py createsuperuser        # usa una contraseña FUERTE y única
 python manage.py seed_datos             # zonas de Tijuana + datos demo
 python manage.py seed_remodelacion      # costos de remodelación por zona
+```
+
+`seed_datos` reutiliza el superusuario que acabas de crear. Solo si no existe
+ninguno crea `admin` con una contraseña aleatoria que imprime **una sola vez**.
+
+## Paso 6b — Comprobar que no quedó ningún usuario con contraseña débil
+
+Versiones anteriores de `seed_datos` creaban `admin` con la contraseña `admin123`.
+Si desplegaste antes de este cambio, ese usuario existe en el servidor y tiene
+acceso total. Compruébalo y cámbialo:
+
+```bash
+python manage.py shell -c "
+from django.contrib.auth import get_user_model
+for u in get_user_model().objects.filter(is_superuser=True):
+    print(u.username, '— contraseña débil:', u.check_password('admin123'))
+"
+```
+
+Si alguno sale `True`, rota la contraseña de inmediato:
+
+```bash
+python manage.py changepassword admin
 ```
 
 ## Paso 7 (opcional) — Usar tu base de datos local en vez de la demo
@@ -140,6 +168,10 @@ Luego **Restart** en Setup Python App.
 
 ## Seguridad — imprescindible antes de compartir la URL
 
-- Usa una contraseña fuerte en `createsuperuser` (nunca `admin/admin123`).
-- Verifica que `DEBUG=False` en el `.env` (ya lo pusimos).
+- Usa una contraseña fuerte y única en `createsuperuser`.
+- Ejecuta el **Paso 6b** para descartar usuarios con la vieja contraseña `admin123`.
+- Verifica que `DEBUG=False` y `SECRET_KEY` estén en el `.env` (ya los pusimos).
 - El `.env` y `db.sqlite3` nunca deben subir a GitHub (ya están ignorados).
+- Todo el sitio exige sesión iniciada: un visitante anónimo es redirigido a
+  `/login/`. Solo los usuarios que tú crees en el admin pueden ver las
+  propiedades, el dashboard y la exportación CSV.

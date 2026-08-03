@@ -3,6 +3,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Avg, Count
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -22,6 +23,7 @@ from services.telegram import telegram_configurado
 from usuarios.forms import PreferenciasAlertaForm
 
 
+@login_required
 def dashboard(request):
     """Panel de control con filtros y datos para gráficas."""
     ciudad_id = request.GET.get('ciudad')
@@ -98,7 +100,7 @@ def dashboard(request):
     return render(request, 'dashboard/index.html', context)
 
 
-class PropiedadListView(ListView):
+class PropiedadListView(LoginRequiredMixin, ListView):
     model = Propiedad
     template_name = 'propiedades/lista.html'
     context_object_name = 'propiedades'
@@ -137,6 +139,7 @@ class PropiedadListView(ListView):
         return ctx
 
 
+@login_required
 def propiedad_detalle(request, pk):
     propiedad = get_object_or_404(
         Propiedad.objects.select_related('zona', 'zona__municipio', 'fuente', 'analisis'),
@@ -282,6 +285,7 @@ def busqueda_ejecutar(request, pk):
     return redirect('busqueda_config')
 
 
+@login_required
 def exportar_propiedades_csv(request):
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename="casa_verde_propiedades.csv"'

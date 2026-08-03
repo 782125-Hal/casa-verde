@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 
 from core.views import (
@@ -19,6 +20,12 @@ admin.site.index_title = 'Panel de oportunidades inmobiliarias'
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path(
+        'login/',
+        LoginView.as_view(template_name='registration/login.html', redirect_authenticated_user=True),
+        name='login',
+    ),
+    path('logout/', LogoutView.as_view(), name='logout'),
     path('', dashboard, name='dashboard'),
     path('propiedades/', PropiedadListView.as_view(), name='propiedades_lista'),
     path('propiedades/exportar/', exportar_propiedades_csv, name='exportar_csv'),

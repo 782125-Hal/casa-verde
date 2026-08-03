@@ -11,13 +11,19 @@ Identifica propiedades con precio por debajo del valor de mercado, calcula ROI y
 ```bash
 cd "Desktop/Casa Verde"
 pip install -r requirements.txt
+cp .env.example .env          # DEBUG=True para desarrollo local
 python manage.py migrate
-python manage.py seed_datos
+python manage.py seed_datos   # imprime una contraseña aleatoria para `admin`
 python manage.py runserver
 ```
 
+- **Acceso:** http://127.0.0.1:8000/login/ — todo el sitio requiere sesión
 - **Dashboard:** http://127.0.0.1:8000/
-- **Admin:** http://127.0.0.1:8000/admin/ (admin / admin123)
+- **Admin:** http://127.0.0.1:8000/admin/
+
+`seed_datos` reutiliza el superusuario existente si ya hay uno. Si tiene que
+crear `admin`, genera una contraseña aleatoria y la muestra **una sola vez**;
+guárdala. Para fijarla tú: `python manage.py seed_datos --admin-password 'TuClave'`.
 
 ## Estructura
 
@@ -37,8 +43,11 @@ Ver carpeta `docs/` para requerimientos, arquitectura, ER, backlog y cronograma.
 
 ## Funciones disponibles
 
+Todas las vistas exigen sesión iniciada; los visitantes anónimos van a `/login/`.
+
 | Módulo | URL | Descripción |
 |--------|-----|-------------|
+| Acceso | `/login/` | Inicio de sesión (roles no-staff incluidos) |
 | Dashboard | `/` | KPIs, gráficas, ranking, filtro por zona |
 | Propiedades | `/propiedades/` | Listado con filtros + exportar CSV |
 | Búsqueda | `/busqueda/` | Configurar búsqueda semanal por zona |

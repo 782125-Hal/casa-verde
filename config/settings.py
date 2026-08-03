@@ -1,18 +1,32 @@
 from pathlib import Path
 
-from decouple import Config, Csv, RepositoryEnv
+from decouple import Config, Csv, RepositoryEmpty, RepositoryEnv
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Si no hay .env se usa un repositorio vacío: decouple sigue leyendo de las
+# variables de entorno del sistema (Config.get consulta os.environ primero).
 _env_path = BASE_DIR / '.env'
-config = Config(RepositoryEnv(_env_path)) if _env_path.exists() else Config()
+config = Config(RepositoryEnv(_env_path) if _env_path.exists() else RepositoryEmpty())
 
-SECRET_KEY = config(
-    'SECRET_KEY',
-    default='django-insecure-casa-verde-dev-key-change-in-production',
-)
+# DEBUG por defecto False: si el .env falta o se borra en el servidor, la app
+# arranca en modo seguro en vez de exponer trazas y configuración.
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-DEBUG = config('DEBUG', default=True, cast=bool)
+# SECRET_KEY firma sesiones y tokens CSRF. En desarrollo se permite una clave de
+# relleno; en producción es obligatoria (una clave conocida permite falsificar
+# sesiones de administrador).
+SECRET_KEY = config('SECRET_KEY', default='')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-solo-desarrollo-local-no-usar-en-produccion'
+    else:
+        raise ImproperlyConfigured(
+            'Falta SECRET_KEY en el archivo .env. Genera una con:\n'
+            '  python -c "from django.core.management.utils import '
+            'get_random_secret_key; print(get_random_secret_key())"'
+        )
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
@@ -120,8 +134,11 @@ if not DEBUG:
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-LOGIN_URL = '/admin/login/'
+# Login propio (no el del admin): el admin solo deja entrar a usuarios staff, y
+# los roles inversionista/consulta no lo son.
+LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/login/'
 
 # Casa Verde — parámetros globales
 # Celery (opcional — Fase 4 producción)

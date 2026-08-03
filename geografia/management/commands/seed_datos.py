@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.utils.crypto import get_random_string
 
 from analisis.models import ConfiguracionBusqueda
 from geografia.models import Estado, Municipio, ZonaMercado
@@ -208,23 +209,46 @@ class Command(BaseCommand):
             action='store_true',
             help='Elimina propiedades de demostración anteriores antes de cargar',
         )
+        parser.add_argument(
+            '--admin-password',
+            help=(
+                'Contraseña del usuario admin si hay que crearlo. Si se omite se '
+                'genera una aleatoria y se muestra una sola vez.'
+            ),
+        )
 
-    def handle(self, *args, **options):
+    def _asegurar_admin(self, options):
+        """
+        Devuelve un usuario administrador para asignar como capturista de los
+        datos demo. Nunca fija una contraseña conocida: si ya existe algún
+        superusuario lo reutiliza, y si tiene que crear uno usa la contraseña
+        indicada o una aleatoria que se imprime una sola vez.
+        """
         User = get_user_model()
 
-        admin, created = User.objects.get_or_create(
+        existente = User.objects.filter(is_superuser=True).order_by('pk').first()
+        if existente:
+            self.stdout.write(f'Usando superusuario existente: {existente.username}')
+            return existente
+
+        password = options.get('admin_password') or get_random_string(16)
+        generada = not options.get('admin_password')
+
+        admin = User.objects.create_superuser(
             username='admin',
-            defaults={
-                'email': 'admin@casaverde.local',
-                'rol': 'administrador',
-                'is_staff': True,
-                'is_superuser': True,
-            },
+            email='',
+            password=password,
+            rol='administrador',
         )
-        if created:
-            admin.set_password('admin123')
-            admin.save()
-            self.stdout.write(self.style.SUCCESS('Usuario admin creado (admin / admin123)'))
+        self.stdout.write(self.style.SUCCESS('Usuario admin creado.'))
+        if generada:
+            self.stdout.write(self.style.WARNING(
+                f'Contraseña generada (guárdala ahora, no se vuelve a mostrar): {password}'
+            ))
+        return admin
+
+    def handle(self, *args, **options):
+        admin = self._asegurar_admin(options)
 
         if options['reset']:
             borradas = Propiedad.objects.filter(
