@@ -22,25 +22,13 @@ from __future__ import annotations
 from decimal import Decimal
 from io import BytesIO
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import cm
-from reportlab.platypus import (
-    KeepTogether,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
-
-VERDE = colors.HexColor('#1a7f37')
-GRIS = colors.HexColor('#6e7781')
-GRIS_CLARO = colors.HexColor('#f0f2f4')
+# openpyxl y reportlab NO se importan a nivel de módulo, a propósito: son pesados
+# (openpyxl arrastra numpy, que en el hosting compartido cPanel falla al crear
+# los hilos de OpenBLAS) y NO están en requirements-prod.txt. Como config/urls.py
+# importa este módulo al arrancar, cargarlas aquí tumbaría TODO el sitio con un
+# error 500. Se importan dentro de cada función de exportación: así el sitio
+# arranca siempre y solo la exportación concreta necesita la librería —y falla
+# de forma aislada si no estuviera instalada, sin afectar al resto—.
 
 
 def _pesos(valor) -> str:
@@ -73,6 +61,23 @@ def _capas(presupuesto):
 
 def presupuesto_a_pdf(presupuesto) -> bytes:
     """Presupuesto presentable: encabezado, partidas por categoría y capas."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        KeepTogether,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+
+    VERDE = colors.HexColor('#1a7f37')
+    GRIS = colors.HexColor('#6e7781')
+    GRIS_CLARO = colors.HexColor('#f0f2f4')
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=letter,
@@ -178,26 +183,33 @@ def presupuesto_a_pdf(presupuesto) -> bytes:
 # Excel
 # ---------------------------------------------------------------------------
 
-_ENCABEZADO = Font(bold=True, color='FFFFFF')
-_RELLENO = PatternFill('solid', fgColor='1A7F37')
 _MONEDA = '#,##0.00'
 
 
 def _escribir_encabezado(hoja, titulos):
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    encabezado = Font(bold=True, color='FFFFFF')
+    relleno = PatternFill('solid', fgColor='1A7F37')
     hoja.append(titulos)
     for celda in hoja[1]:
-        celda.font = _ENCABEZADO
-        celda.fill = _RELLENO
+        celda.font = encabezado
+        celda.fill = relleno
         celda.alignment = Alignment(horizontal='center')
 
 
 def _ajustar_anchos(hoja, anchos):
+    from openpyxl.utils import get_column_letter
+
     for i, ancho in enumerate(anchos, start=1):
         hoja.column_dimensions[get_column_letter(i)].width = ancho
 
 
 def presupuesto_a_excel(presupuesto) -> bytes:
     """Dos hojas: las partidas (para trabajar sobre ellas) y el resumen de capas."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment
+
     libro = Workbook()
 
     hoja = libro.active
@@ -240,6 +252,8 @@ def cierre_a_excel(presupuesto) -> bytes:
     Es el documento de after-action. Se genera aunque la obra no esté cerrada:
     sirve igual como corte semanal del §4.3.
     """
+    from openpyxl import Workbook
+
     libro = Workbook()
 
     hoja = libro.active
