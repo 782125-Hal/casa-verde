@@ -18,6 +18,7 @@ from core.views import (
 from presupuestos.views import (
     PresupuestoListView,
     catalogo_buscar,
+    estimado_rapido,
     partida_eliminar,
     partida_guardar,
     presupuesto_crear,
@@ -52,4 +53,5 @@ urlpatterns = [
     path('presupuestos/<int:pk>/partidas/<int:partida_pk>/', partida_guardar, name='partida_editar'),
     path('presupuestos/<int:pk>/partidas/<int:partida_pk>/eliminar/', partida_eliminar, name='partida_eliminar'),
     path('catalogo/buscar/', catalogo_buscar, name='catalogo_buscar'),
+    path('propiedades/<int:propiedad_pk>/estimado-rapido/', estimado_rapido, name='estimado_rapido'),
 ]

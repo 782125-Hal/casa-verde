@@ -192,6 +192,68 @@
 
     <!-- ================= Columna derecha: desglose en vivo =================== -->
     <div class="col-xl-4">
+        {% if impacto %}
+        <div class="card shadow-sm mb-3 border-{% if impacto.simulado.semaforo == 'verde' %}success{% elif impacto.simulado.semaforo == 'amarillo' %}warning{% elif impacto.simulado.semaforo == 'rojo' %}danger{% else %}secondary{% endif %}">
+            <div class="card-header bg-white fw-semibold">
+                <i class="bi bi-graph-up-arrow"></i> Impacto en el ROI
+            </div>
+            <div class="card-body">
+                <p class="mb-3">
+                    {% if impacto.ya_es_activo %}
+                    Este presupuesto <strong>ya alimenta</strong> el análisis de la propiedad:
+                    {% else %}
+                    Con este presupuesto, la propiedad quedaría en:
+                    {% endif %}
+                </p>
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <span class="semaforo-dot semaforo-{{ impacto.simulado.semaforo }}"
+                          style="width:22px;height:22px;"></span>
+                    <div>
+                        <div class="fs-4 fw-bold mb-0">ROI {{ impacto.simulado.roi|floatformat:1 }}%</div>
+                        <div class="small text-muted">
+                            anualizado {{ impacto.simulado.roi_anualizado|floatformat:1 }}% ·
+                            recuperación {{ impacto.simulado.anos_recuperacion|floatformat:1 }} años
+                        </div>
+                    </div>
+                </div>
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="text-muted small">Inversión total</td>
+                            <td class="text-end small">${{ impacto.simulado.inversion_total|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted small">Utilidad potencial</td>
+                            <td class="text-end small">${{ impacto.simulado.utilidad_potencial|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted small">Descuento vs. mercado</td>
+                            <td class="text-end small">{{ impacto.simulado.descuento_mercado|floatformat:1 }}%</td>
+                        </tr>
+                        {% if impacto.actual and not impacto.ya_es_activo %}
+                        <tr class="border-top">
+                            <td class="text-muted small">ROI vigente hoy</td>
+                            <td class="text-end small">{{ impacto.actual.roi|floatformat:1 }}%
+                                <span class="semaforo-dot semaforo-{{ impacto.actual.semaforo }}"></span>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                {% if not impacto.ya_es_activo %}
+                <div class="alert alert-light border small mt-3 mb-0">
+                    Cifras <strong>simuladas</strong>: no se ha guardado nada en la propiedad.
+                    Marca el presupuesto como <em>activo</em> para que mande sobre el ROI.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% elif presupuesto.propiedad %}
+        <div class="alert alert-secondary small">
+            La propiedad no tiene precio publicado, así que no hay ROI que calcular.
+        </div>
+        {% endif %}
+
         <div class="card shadow-sm position-sticky" style="top:1rem;">
             <div class="card-header bg-white fw-semibold">Desglose de capas</div>
             <div class="card-body">

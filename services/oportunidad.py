@@ -144,6 +144,56 @@ class OportunidadService:
         return recomendaciones.get(semaforo, '')
 
     @classmethod
+    def config_de(cls, usuario):
+        """Umbrales del semáforo: los del usuario, o los globales por defecto."""
+        if usuario:
+            return {
+                'descuento_minimo': usuario.descuento_minimo,
+                'plazo_recuperacion_max': usuario.plazo_recuperacion_max,
+                'tasa_bancaria': usuario.tasa_ahorro_personal,
+                'riesgo_maximo': usuario.riesgo_maximo,
+            }
+        return {
+            'descuento_minimo': Decimal(str(DEFAULT_DESCUENTO_MINIMO)),
+            'plazo_recuperacion_max': DEFAULT_PLAZO_RECUPERACION,
+            'tasa_bancaria': TasaReferenciaBancaria.obtener_tasa_vigente(),
+            'riesgo_maximo': 3,
+        }
+
+    @classmethod
+    def simular_con_remodelacion(cls, propiedad, total_remodelacion, usuario=None):
+        """¿Qué ROI y semáforo daría la propiedad con ESE costo de remodelación?
+
+        NO persiste nada: sirve para el "con este presupuesto el ROI sería X%"
+        del detalle, donde hay que responder antes de que el usuario decida
+        activar el presupuesto.
+
+        Reutiliza las mismas funciones que ``analizar_propiedad`` —costos,
+        métricas y semáforo—; lo único que cambia es de dónde sale la partida de
+        reparaciones. Recalcular aquí las fórmulas habría creado una segunda
+        verdad que se desincroniza en cuanto alguien toque la de arriba.
+        """
+        valoracion = ValoracionService.valorar(propiedad)
+        costos = cls.calcular_costos_adicionales(
+            propiedad.precio_publicado, {'presupuesto': Decimal(str(total_remodelacion))},
+        )
+        metricas = cls.calcular_metricas_financieras(
+            propiedad.precio_publicado, valoracion['valor_total_estimado'], costos,
+        )
+        metricas['datos_completos'] = valoracion['datos_completos']
+        metricas['riesgo_total'] = propiedad.riesgo_total
+
+        semaforo, es_oportunidad, es_prioritaria = cls.determinar_semaforo(
+            metricas, cls.config_de(usuario),
+        )
+        return {
+            **metricas,
+            'semaforo': semaforo,
+            'es_oportunidad': es_oportunidad,
+            'es_prioritaria': es_prioritaria,
+        }
+
+    @classmethod
     def analizar_propiedad(cls, propiedad, usuario=None):
         """
         Ejecuta análisis completo y persiste AnalisisInversion.
@@ -160,20 +210,7 @@ class OportunidadService:
         metricas['datos_completos'] = valoracion['datos_completos']
         metricas['riesgo_total'] = propiedad.riesgo_total
 
-        if usuario:
-            config = {
-                'descuento_minimo': usuario.descuento_minimo,
-                'plazo_recuperacion_max': usuario.plazo_recuperacion_max,
-                'tasa_bancaria': usuario.tasa_ahorro_personal,
-                'riesgo_maximo': usuario.riesgo_maximo,
-            }
-        else:
-            config = {
-                'descuento_minimo': Decimal(str(DEFAULT_DESCUENTO_MINIMO)),
-                'plazo_recuperacion_max': DEFAULT_PLAZO_RECUPERACION,
-                'tasa_bancaria': TasaReferenciaBancaria.obtener_tasa_vigente(),
-                'riesgo_maximo': 3,
-            }
+        config = cls.config_de(usuario)
 
         semaforo, es_oportunidad, es_prioritaria = cls.determinar_semaforo(metricas, config)
         recomendacion = cls.generar_recomendacion(semaforo, metricas, es_prioritaria)
@@ -189,6 +226,12 @@ class OportunidadService:
             riesgos.append('Superficie estimada de forma conservadora')
         if remodelacion['es_estimado'] and remodelacion['presupuesto'] > 0:
             riesgos.append('Presupuesto de remodelación con costo genérico (zona sin costo capturado)')
+        if remodelacion.get('origen') == 'presupuesto':
+            # Que quede claro en el análisis que el número ya no es paramétrico.
+            riesgos.append(
+                f'Remodelación tomada del presupuesto «{remodelacion["presupuesto_nombre"]}» '
+                f'(detallado por partidas, no estimado por m²)'
+            )
 
         analisis, _ = AnalisisInversion.objects.update_or_create(
             propiedad=propiedad,

@@ -46,15 +46,31 @@ class PresupuestoForm(forms.ModelForm):
         )
         self.fields['propiedad'].required = False
         self.fields['propiedad'].empty_label = 'Sin propiedad ligada'
+        # m² de construcción por propiedad: el template los emite como JSON para
+        # precargar el área al elegirla, sin una segunda petición.
+        self.m2_por_propiedad = {
+            str(p.pk): str(p.m2_construccion or '')
+            for p in self.fields['propiedad'].queryset
+        }
 
     def clean(self):
-        """Un solo presupuesto activo por propiedad.
+        """Dos reglas del encabezado.
 
-        El modelo ya lo impide con una UniqueConstraint, pero eso sale como
-        IntegrityError; aquí se traduce a un error de formulario legible.
+        1. **Área precargada desde la propiedad** si el usuario la dejó vacía. Se
+           hace en el servidor y no solo en JS porque el área alimenta el
+           ``costo_m2``: si llegara vacía, ese indicador quedaría mudo. Queda
+           EDITABLE — solo se rellena cuando no se capturó nada.
+        2. **Un solo presupuesto activo por propiedad.** El modelo ya lo impide
+           con una UniqueConstraint, pero eso sale como IntegrityError; aquí se
+           traduce a un error de formulario legible.
         """
         datos = super().clean()
         propiedad = datos.get('propiedad')
+
+        if propiedad and not datos.get('area_m2') and propiedad.m2_construccion:
+            datos['area_m2'] = propiedad.m2_construccion
+            self.cleaned_data['area_m2'] = propiedad.m2_construccion
+
         if datos.get('es_activo') and propiedad:
             otros = Presupuesto.objects.filter(propiedad=propiedad, es_activo=True)
             if self.instance.pk:
