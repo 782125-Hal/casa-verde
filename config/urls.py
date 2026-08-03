@@ -24,6 +24,9 @@ from presupuestos.views import (
     orden_eliminar,
     orden_guardar,
     orden_resolver,
+    presupuesto_cierre,
+    presupuesto_excel,
+    presupuesto_pdf,
     partida_eliminar,
     partida_guardar,
     presupuesto_crear,
@@ -65,6 +68,10 @@ urlpatterns = [
     path('presupuestos/<int:pk>/ordenes/<int:orden_pk>/', orden_guardar, name='orden_editar'),
     path('presupuestos/<int:pk>/ordenes/<int:orden_pk>/eliminar/', orden_eliminar, name='orden_eliminar'),
     path('presupuestos/<int:pk>/ordenes/<int:orden_pk>/<str:decision>/', orden_resolver, name='orden_resolver'),
+    # Exportación (Fase 5)
+    path('presupuestos/<int:pk>/pdf/', presupuesto_pdf, name='presupuesto_pdf'),
+    path('presupuestos/<int:pk>/excel/', presupuesto_excel, name='presupuesto_excel'),
+    path('presupuestos/<int:pk>/cierre/', presupuesto_cierre, name='presupuesto_cierre'),
     path('catalogo/buscar/', catalogo_buscar, name='catalogo_buscar'),
     path('propiedades/<int:propiedad_pk>/estimado-rapido/', estimado_rapido, name='estimado_rapido'),
 ]

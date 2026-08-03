@@ -19,9 +19,21 @@
     </div>
     <div class="text-end">
         <a href="{% url 'presupuestos_lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
-        <button class="btn btn-sm btn-outline-secondary" disabled title="Fase 5">
-            <i class="bi bi-download"></i> Exportar
-        </button>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-download"></i> Exportar
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="{% url 'presupuesto_pdf' presupuesto.pk %}">
+                    <i class="bi bi-file-earmark-pdf"></i> Presupuesto (PDF)</a></li>
+                <li><a class="dropdown-item" href="{% url 'presupuesto_excel' presupuesto.pk %}">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Presupuesto (Excel)</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{% url 'presupuesto_cierre' presupuesto.pk %}">
+                    <i class="bi bi-clipboard-data"></i> Cierre de obra (Excel)
+                    <div class="small text-muted">Presupuestado vs. real, órdenes y KPIs</div></a></li>
+            </ul>
+        </div>
     </div>
 </div>
 

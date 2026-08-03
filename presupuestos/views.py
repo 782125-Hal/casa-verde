@@ -12,7 +12,8 @@ vía ``RemodelacionService.estimar``, y de ahí el ROI y el semáforo se recalcu
 con el pipeline de siempre. Aquí solo se simula el impacto (sin persistir) y se
 ofrece el estimado paramétrico de 1 clic.
 
-Fuera de alcance: gastos reales y órdenes de cambio (Fase 4), exportación (Fase 5).
+Fase 4: gastos reales, órdenes de cambio y alertas de control de obra.
+Fase 5: exportación a PDF/Excel y reporte de cierre.
 """
 from datetime import date
 from decimal import Decimal
@@ -20,7 +21,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.generic import ListView
 
@@ -35,6 +36,7 @@ from presupuestos.choices import (
     TIPO_OBRA_REMODELACION,
 )
 from presupuestos.choices import FUENTE_CAPITAL_ADICIONAL
+from presupuestos.exportar import cierre_a_excel, presupuesto_a_excel, presupuesto_a_pdf
 from presupuestos.forms import (
     GastoForm,
     OrdenCambioForm,
@@ -476,3 +478,53 @@ def orden_eliminar(request, pk, orden_pk):
     get_object_or_404(OrdenCambio, pk=orden_pk, presupuesto=presupuesto).delete()
     messages.success(request, 'Orden eliminada.')
     return redirect('presupuesto_detalle', pk=presupuesto.pk)
+
+
+# ---------------------------------------------------------------------------
+# Exportación (Fase 5)
+# ---------------------------------------------------------------------------
+
+def _descarga(contenido: bytes, nombre: str, tipo: str):
+    """Respuesta de descarga. El nombre se sanea porque sale del nombre del
+    presupuesto, que lo escribe el usuario y puede traer barras o comillas."""
+    seguro = ''.join(c if c.isalnum() or c in ' -_.' else '_' for c in nombre).strip()
+    respuesta = HttpResponse(contenido, content_type=tipo)
+    respuesta['Content-Disposition'] = f'attachment; filename="{seguro}"'
+    return respuesta
+
+
+@login_required
+def presupuesto_pdf(request, pk):
+    presupuesto = get_object_or_404(
+        Presupuesto.objects.select_related('propiedad'), pk=pk,
+    )
+    return _descarga(
+        presupuesto_a_pdf(presupuesto),
+        f'Presupuesto {presupuesto.nombre}.pdf',
+        'application/pdf',
+    )
+
+
+@login_required
+def presupuesto_excel(request, pk):
+    presupuesto = get_object_or_404(
+        Presupuesto.objects.select_related('propiedad'), pk=pk,
+    )
+    return _descarga(
+        presupuesto_a_excel(presupuesto),
+        f'Presupuesto {presupuesto.nombre}.xlsx',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+
+@login_required
+def presupuesto_cierre(request, pk):
+    """Reporte de cierre: presupuestado vs. real, órdenes y KPIs (§4.6)."""
+    presupuesto = get_object_or_404(
+        Presupuesto.objects.select_related('propiedad'), pk=pk,
+    )
+    return _descarga(
+        cierre_a_excel(presupuesto),
+        f'Cierre de obra {presupuesto.nombre}.xlsx',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
