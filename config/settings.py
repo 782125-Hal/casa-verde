@@ -114,12 +114,20 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 # Carpeta donde `collectstatic` junta los estáticos para producción.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Almacenamiento de estáticos: en producción usa WhiteNoise (comprimido).
+# Almacenamiento de estáticos en producción.
+#
+# Se usa ManifestStaticFilesStorage (de Django), NO el CompressedManifest de
+# WhiteNoise: la variante comprimida gzip/brotli los archivos en PARALELO con un
+# ThreadPoolExecutor, y el hosting compartido cPanel limita los procesos
+# (RLIMIT_NPROC), así que `collectstatic` moría con "can't start new thread".
+# El Manifest de Django hashea los nombres (cache-busting) SIN comprimir ni crear
+# hilos. WhiteNoise sigue sirviéndolos igual; solo van sin precompresión, algo
+# irrelevante para el tamaño de este sitio.
 if not DEBUG:
     STORAGES = {
         'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
         'staticfiles': {
-            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+            'BACKEND': 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage',
         },
     }
 
