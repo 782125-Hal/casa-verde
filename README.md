@@ -25,6 +25,19 @@ python manage.py runserver
 crear `admin`, genera una contraseña aleatoria y la muestra **una sola vez**;
 guárdala. Para fijarla tú: `python manage.py seed_datos --admin-password 'TuClave'`.
 
+### Antes de desplegar
+
+El hosting cPanel corre **Python 3.9**, y es habitual desarrollar en una versión
+más nueva. Sintaxis como `Decimal | None` (3.10+) pasa el `manage.py check` local
+y revienta al importar en el servidor, así que hay un comando que la detecta:
+
+```bash
+python manage.py check_39     # sale con código 1 si encuentra algo
+```
+
+También corre dentro de `manage.py test`, de modo que la suite falla si alguien
+introduce sintaxis que el servidor no acepta.
+
 ## Estructura
 
 | App | Responsabilidad |
