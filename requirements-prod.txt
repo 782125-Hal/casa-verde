@@ -16,3 +16,11 @@ whitenoise>=6.6            # sirve archivos estáticos en producción
 requests>=2.31
 beautifulsoup4>=4.12
 lxml>=5.0
+
+# Exportación de presupuestos (PDF y Excel). No se importan al arrancar —
+# presupuestos/exportar.py las carga dentro de cada función— pero sin ellas
+# instaladas el botón Exportar responde con ImportError.
+# ReportLab es Python puro salvo un acelerador opcional: instala en shared
+# hosting, que es la razón por la que se eligió sobre WeasyPrint.
+reportlab>=4.0
+openpyxl>=3.1

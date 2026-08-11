@@ -51,14 +51,29 @@ fi
 echo "-> git pull..."
 git pull
 
-# 4) Migraciones y estaticos ----------------------------------------------
+# 4) Dependencias ----------------------------------------------------------
+# Va ANTES de migrar: si una version nueva del codigo estrena una libreria y no
+# se instala, el fallo aparece despues, en caliente y en una sola pantalla del
+# sitio. Paso justamente eso con reportlab y la exportacion a PDF.
+# Es idempotente: si no hay nada nuevo, pip no hace nada.
+echo "-> Instalando dependencias de produccion..."
+pip install -q -r requirements-prod.txt
+
+# 5) Compatibilidad con el Python del servidor -----------------------------
+# El desarrollo va en 3.12 y aqui corre 3.9: sintaxis como `Decimal | None`
+# pasa el check local y revienta al importar. Se verifica antes de migrar para
+# no dejar la base a medio camino de un despliegue que no iba a arrancar.
+echo "-> Verificando compatibilidad con Python 3.9..."
+python manage.py check_39
+
+# 6) Migraciones y estaticos ----------------------------------------------
 echo "-> Aplicando migraciones..."
 python manage.py migrate --noinput
 
 echo "-> Recopilando archivos estaticos..."
 python manage.py collectstatic --noinput
 
-# 5) Chequeo de seguridad: contraseña debil admin123 ----------------------
+# 7) Chequeo de seguridad: contraseña debil admin123 ----------------------
 echo "-> Revisando superusuarios con contraseña débil 'admin123'..."
 python manage.py shell -c "
 from django.contrib.auth import get_user_model
@@ -70,7 +85,7 @@ else:
     print('   OK — ningun superusuario usa admin123.')
 "
 
-# 6) Reiniciar la app (Passenger) -----------------------------------------
+# 8) Reiniciar la app (Passenger) -----------------------------------------
 echo "-> Reiniciando la aplicacion..."
 mkdir -p "$PROJECT_DIR/tmp"
 touch "$PROJECT_DIR/tmp/restart.txt"

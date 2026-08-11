@@ -39,13 +39,14 @@ tu página actual en `marhal.com.mx`.
 
 1. cPanel → sección **Software** → **Setup Python App** → **Create Application**.
 2. Configura:
-   - **Python version:** 3.11 (o la 3.10+ más alta disponible)
+   - **Python version:** 3.9 (la que corre el hosting; `deploy.sh` da por
+     hecho esa ruta de entorno virtual)
    - **Application root:** `casa-verde`
    - **Application URL:** `max.marhal.com.mx`
    - **Application startup file:** `passenger_wsgi.py`
    - **Application Entry point:** `application`
 3. **Create**. cPanel crea un entorno virtual y muestra arriba un comando
-   `source /home/marhalco/virtualenv/casa-verde/3.11/bin/activate && cd ...`.
+   `source /home/marhalco/virtualenv/casa-verde/3.9/bin/activate && cd ...`.
    **Cópialo**, lo usarás en el siguiente paso.
 
 ## Paso 4 — Instalar dependencias
@@ -103,7 +104,12 @@ python manage.py collectstatic --noinput
 python manage.py createsuperuser        # usa una contraseña FUERTE y única
 python manage.py seed_datos             # zonas de Tijuana + datos demo
 python manage.py seed_remodelacion      # costos de remodelación por zona
+python manage.py seed_catalogo          # catálogo de precios unitarios (presupuestos)
 ```
+
+`seed_catalogo` se corre **una sola vez** y no viaja en el repositorio: los datos
+sembrados no se commitean. Sin él, la pestaña Presupuestos funciona pero el
+autocompletado de conceptos aparece vacío.
 
 `seed_datos` reutiliza el superusuario que acabas de crear. Solo si no existe
 ninguno crea `admin` con una contraseña aleatoria que imprime **una sola vez**.
@@ -159,10 +165,14 @@ servidor, en el **Terminal** con el entorno activo:
 ```bash
 cd ~/casa-verde
 git pull
-pip install -r requirements.txt      # solo si cambiaron dependencias
-python manage.py migrate             # solo si hubo cambios de modelos
+pip install -r requirements-prod.txt  # el completo trae pandas/playwright: no aquí
+python manage.py check_39             # el hosting es 3.9; el desarrollo, más nuevo
+python manage.py migrate              # solo si hubo cambios de modelos
 python manage.py collectstatic --noinput
 ```
+
+Es justo lo que hace `deploy.sh` (ver más abajo), que además comprueba el
+`SECRET_KEY` antes de tocar nada. Prefiere el script.
 
 Luego **Restart** en Setup Python App.
 
@@ -201,11 +211,16 @@ El `deploy.sh` ejecuta el despliegue de forma segura y en orden:
 2. **Verifica que exista `SECRET_KEY` en `.env` antes de tocar nada.** Si falta,
    aborta para no dejar la app caída (error 500).
 3. `git pull` para traer los últimos cambios.
-4. `python manage.py migrate` y `collectstatic --noinput`.
-5. **Revisa si algún superusuario todavía usa la contraseña débil `admin123`**
+4. `pip install -r requirements-prod.txt`, por si la versión nueva estrena
+   alguna librería. Es idempotente: sin cambios, pip no hace nada.
+5. `python manage.py check_39`, que aborta si el código trae sintaxis que el
+   Python 3.9 del hosting no acepta. Va antes de migrar para no dejar la base a
+   medio camino de un despliegue que no iba a arrancar.
+6. `python manage.py migrate` y `collectstatic --noinput`.
+7. **Revisa si algún superusuario todavía usa la contraseña débil `admin123`**
    y avisa cuál rotar con `python manage.py changepassword <usuario>`.
-6. Solicita el reinicio de la aplicación (`tmp/restart.txt`).
-7. Imprime el último commit desplegado para confirmar la versión.
+8. Solicita el reinicio de la aplicación (`tmp/restart.txt`).
+9. Imprime el último commit desplegado para confirmar la versión.
 
 ### Nota de mantenimiento
 
