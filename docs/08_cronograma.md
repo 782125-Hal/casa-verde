@@ -36,8 +36,26 @@ Fase 7:                                                                         
 | M5: Alertas | Semana 20 | Notificaciones email/WhatsApp |
 | M6: Producción | Semana 24 | Deploy con reportes y mapas |
 
-## Estado actual (Junio 2026)
+## Estado actual (Noviembre 2026)
 
-- ✅ Documentación completa (RF, RT, ER, arquitectura, backlog)
-- ✅ Scaffold Django con apps modulares
-- 🔄 Fase 1 en implementación: modelos, admin, servicios base
+| Fase / hito | Estado | Notas |
+|-------------|--------|-------|
+| Fase 1 — M1 | ✅ | Registro manual, BD de mercado, admin |
+| Fase 2 — M2 | ✅ | Valoración, ROI y semáforo automáticos |
+| Fase 3 — M3 | ✅ | Dashboard, gráficas, ranking, filtros por ciudad/zona |
+| Fase 4 — M4 | ✅ parcial | Búsqueda semanal y 5 scrapers (corren en local). Pendiente: Celery/Redis y PostgreSQL |
+| Fase 5 — M5 | 🔄 | Alertas internas, email y Telegram listos. Pendiente: WhatsApp (Twilio) |
+| Fase 6 — M6 | 🔄 | En producción desde julio 2026 (max.marhal.com.mx). Exportación CSV y PDF/Excel lista. Pendiente: mapas y módulo histórico |
+| Fase 7 | ⏳ | IA predictiva sin iniciar |
+
+### Trabajo fuera del plan original
+
+- **Julio 2026:** despliegue en cPanel (Passenger, Python 3.9), soporte multi-ciudad (Tijuana + Tecate).
+- **Agosto 2026:** seguridad (login obligatorio, sin contraseñas por defecto, `SECRET_KEY` obligatoria), `deploy.sh`, módulo de **presupuestos de obra** en 5 fases (captura, impacto en ROI, control de obra, órdenes de cambio, exportación PDF/Excel y cierre), valuación de obra nueva y comando `check_39` para compatibilidad con Python 3.9.
+
+### Siguientes pasos
+
+1. Pruebas para `presupuestos` y scrapers (hoy la suite cubre `core` y `analisis`).
+2. WhatsApp (F5-03).
+3. Mapas (F6-01) y módulo histórico (F6-04).
+4. Migración a PostgreSQL (F4-06).
